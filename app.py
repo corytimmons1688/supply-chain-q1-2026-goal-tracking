@@ -1075,19 +1075,17 @@ def render_projects():
             completion = project.get('completion_percentage', 0)
             status = project.get('status', 'Not Started')
             
-            # Highlight selected row
+            # Container for the row - highlight if selected
             if is_expanded:
                 st.markdown("""
-                <div style="background: #1a365d; padding: 8px; margin: -8px -16px 8px -16px; border-radius: 8px;">
-                </div>
+                <div style="background: rgba(45, 55, 72, 0.1); margin: -10px -20px; padding: 10px 20px; border-radius: 8px;">
                 """, unsafe_allow_html=True)
             
             # Main row for objective (no expand button)
             col_num, col_title, col_owner, col_progress, col_status = st.columns([0.3, 4, 0.6, 1, 1])
             
             with col_num:
-                num_style = "color: white; font-weight: bold;" if is_expanded else "color: #1E3A5F; font-weight: bold;"
-                st.markdown(f"<span style='{num_style} font-size: 16px;'>{obj_num}</span>", unsafe_allow_html=True)
+                st.markdown(f"<span style='color: #1E3A5F; font-weight: bold; font-size: 16px;'>{obj_num}</span>", unsafe_allow_html=True)
             
             with col_title:
                 # Clickable title - toggles selection
@@ -1139,11 +1137,12 @@ def render_projects():
                 </div>
                 """, unsafe_allow_html=True)
             
-            # Divider line (darker if selected)
+            # Divider line
+            st.markdown("<hr style='margin: 0; border: none; border-top: 1px solid #eee;'>", unsafe_allow_html=True)
+            
+            # Close highlight container if selected
             if is_expanded:
-                st.markdown("<hr style='margin: 0; border: none; border-top: 2px solid #1a365d;'>", unsafe_allow_html=True)
-            else:
-                st.markdown("<hr style='margin: 0; border: none; border-top: 1px solid #eee;'>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
     
     # SIDEBAR - Project Details (only shows when expanded)
     if st.session_state.expanded_project_id and col_sidebar:
@@ -1155,10 +1154,12 @@ def render_project_sidebar(projects: list):
     """Render the detail sidebar for the expanded project."""
     project_id = st.session_state.expanded_project_id
     project = None
+    project_idx = None
     
-    for p in projects:
+    for i, p in enumerate(projects):
         if p.get('id') == project_id:
             project = p
+            project_idx = i
             break
     
     if not project:
@@ -1168,28 +1169,15 @@ def render_project_sidebar(projects: list):
     
     obj_num = project.get('objective_number', '?')
     
-    # Sidebar styling with darker background for contrast
+    # Sidebar styling with semi-transparent dark blue background
     st.markdown("""
     <style>
     [data-testid="column"]:last-child {
-        background: #2d3748;
+        background: rgba(45, 55, 72, 0.1);
         padding: 20px;
         border-radius: 12px;
-        border: 1px solid #1a202c;
-        box-shadow: -4px 0 12px rgba(0,0,0,0.15);
-    }
-    [data-testid="column"]:last-child .stMarkdown, 
-    [data-testid="column"]:last-child .stTextArea label,
-    [data-testid="column"]:last-child .stSelectbox label,
-    [data-testid="column"]:last-child .stDateInput label,
-    [data-testid="column"]:last-child p,
-    [data-testid="column"]:last-child span,
-    [data-testid="column"]:last-child h3,
-    [data-testid="column"]:last-child h5 {
-        color: #e2e8f0 !important;
-    }
-    [data-testid="column"]:last-child .stDivider {
-        border-color: #4a5568 !important;
+        border: 1px solid rgba(45, 55, 72, 0.2);
+        box-shadow: -4px 0 12px rgba(0,0,0,0.08);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1238,8 +1226,26 @@ def render_project_sidebar(projects: list):
                 except:
                     due_date = None
             
-            # Subtask row: checkbox, name, and due date all on one line
-            col_check, col_name, col_date = st.columns([0.08, 0.55, 0.37])
+            # Subtask row: reorder buttons, checkbox, name, and due date
+            col_order, col_check, col_name, col_date = st.columns([0.12, 0.08, 0.45, 0.35])
+            
+            with col_order:
+                # Up/Down buttons for reordering
+                btn_col1, btn_col2 = st.columns(2)
+                with btn_col1:
+                    if sub_idx > 0:
+                        if st.button("↑", key=f"up_{project_id}_{sub_idx}", help="Move up"):
+                            move_subtask(project_id, sub_idx, sub_idx - 1)
+                            st.rerun()
+                    else:
+                        st.write("")  # Placeholder
+                with btn_col2:
+                    if sub_idx < len(subtasks) - 1:
+                        if st.button("↓", key=f"down_{project_id}_{sub_idx}", help="Move down"):
+                            move_subtask(project_id, sub_idx, sub_idx + 1)
+                            st.rerun()
+                    else:
+                        st.write("")  # Placeholder
             
             with col_check:
                 new_completed = st.checkbox(
@@ -1397,17 +1403,30 @@ def render_project_sidebar(projects: list):
                 time_str = "Unknown time"
             
             st.markdown(f"""
-            <div style="background: #4a5568; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #63b3ed;">
-                <div style="font-size: 11px; color: #a0aec0; margin-bottom: 6px;">
+            <div style="background: rgba(45, 55, 72, 0.15); border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #4A90D9;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 6px;">
                     🕐 {time_str}
                 </div>
-                <div style="color: #e2e8f0; font-size: 14px;">
+                <div style="color: #333; font-size: 14px;">
                     {note.get('text', '')}
                 </div>
             </div>
             """, unsafe_allow_html=True)
     else:
         st.caption("No notes yet. Add your first note above!")
+
+
+def move_subtask(project_id: str, from_idx: int, to_idx: int):
+    """Move a subtask from one position to another."""
+    for i, p in enumerate(st.session_state.projects):
+        if p.get('id') == project_id:
+            subtasks = st.session_state.projects[i].get('subtasks', [])
+            if 0 <= from_idx < len(subtasks) and 0 <= to_idx < len(subtasks):
+                # Swap the subtasks
+                subtasks[from_idx], subtasks[to_idx] = subtasks[to_idx], subtasks[from_idx]
+                st.session_state.projects[i]['subtasks'] = subtasks
+            break
+    save_projects()
 
 
 def add_note_to_project(project_id: str, note_text: str):
