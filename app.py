@@ -1193,6 +1193,58 @@ def render_project_sidebar(projects: list):
             st.rerun()
     
     st.markdown(f"**{project.get('name', 'Unnamed')}**")
+    
+    # Dependency dropdown - get all subtasks from all projects
+    all_subtasks = []
+    for p in projects:
+        p_num = p.get('objective_number', '?')
+        for s_idx, s in enumerate(p.get('subtasks', [])):
+            subtask_label = f"{p_num}.{s_idx + 1} - {s.get('name', 'Unnamed')}"
+            subtask_id = f"{p.get('id')}_{s_idx}"
+            all_subtasks.append((subtask_id, subtask_label))
+    
+    # Current dependencies
+    current_deps = project.get('dependencies', [])
+    
+    # Create options list
+    dep_options = ["None"] + [label for _, label in all_subtasks]
+    dep_ids = [None] + [sid for sid, _ in all_subtasks]
+    
+    # Find current selection index
+    current_idx = 0
+    if current_deps and len(current_deps) > 0:
+        for i, sid in enumerate(dep_ids):
+            if sid == current_deps[0]:
+                current_idx = i
+                break
+    
+    new_dep = st.selectbox(
+        "🔗 Dependency",
+        options=dep_options,
+        index=current_idx,
+        key=f"dep_{project_id}",
+        help="Select a subtask this objective depends on"
+    )
+    
+    # Update dependencies
+    new_dep_idx = dep_options.index(new_dep)
+    new_dep_id = dep_ids[new_dep_idx] if new_dep_idx > 0 else None
+    new_deps = [new_dep_id] if new_dep_id else []
+    if new_deps != current_deps:
+        update_project_field(project_id, 'dependencies', new_deps)
+    
+    # Potential Savings field
+    current_savings = project.get('potential_savings', 0)
+    new_savings = st.number_input(
+        "💰 Potential Savings ($)",
+        min_value=0,
+        value=current_savings,
+        step=100,
+        key=f"savings_{project_id}"
+    )
+    if new_savings != current_savings:
+        update_project_field(project_id, 'potential_savings', new_savings)
+    
     st.divider()
     
     # Goal
@@ -1209,10 +1261,22 @@ def render_project_sidebar(projects: list):
     
     st.divider()
     
+    # Collect all dependency IDs across all projects (needed for both header and subtask display)
+    all_dependency_ids = set()
+    for p in projects:
+        deps = p.get('dependencies', [])
+        for dep_id in deps:
+            if dep_id:
+                all_dependency_ids.add(dep_id)
+    
     # SUBTASKS with integrated reorder
     st.markdown("##### ✅ Subtasks")
     
     subtasks = project.get('subtasks', [])
+    
+    # Show legend if any subtasks are dependencies
+    if subtasks and any(f"{project_id}_{i}" in all_dependency_ids for i in range(len(subtasks))):
+        st.caption("* = dependency for another objective")
     
     if subtasks:
         for sub_idx, subtask in enumerate(subtasks):
@@ -1225,8 +1289,18 @@ def render_project_sidebar(projects: list):
                 except:
                     due_date = None
             
-            # Clean row: checkbox | name | date | reorder
-            col_check, col_name, col_date, col_move = st.columns([0.08, 0.52, 0.25, 0.15])
+            # Check if this subtask is a dependency
+            subtask_dep_id = f"{project_id}_{sub_idx}"
+            is_dependency = subtask_dep_id in all_dependency_ids
+            
+            # Row with dependency marker: star | checkbox | name | date | reorder
+            col_star, col_check, col_name, col_date, col_move = st.columns([0.06, 0.06, 0.50, 0.23, 0.15])
+            
+            with col_star:
+                if is_dependency:
+                    st.markdown("<span style='color: #f59e0b; font-size: 16px;' title='Dependency'>*</span>", unsafe_allow_html=True)
+                else:
+                    st.write("")
             
             with col_check:
                 new_completed = st.checkbox(
