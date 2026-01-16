@@ -1075,28 +1075,26 @@ def render_projects():
             completion = project.get('completion_percentage', 0)
             status = project.get('status', 'Not Started')
             
-            # Main row for objective
-            col_expand, col_num, col_title, col_owner, col_progress, col_status = st.columns([0.3, 0.3, 4, 0.6, 1, 1])
+            # Highlight selected row
+            if is_expanded:
+                st.markdown("""
+                <div style="background: #1a365d; padding: 8px; margin: -8px -16px 8px -16px; border-radius: 8px;">
+                </div>
+                """, unsafe_allow_html=True)
             
-            with col_expand:
-                expand_icon = "▼" if is_expanded else "▶"
-                if st.button(expand_icon, key=f"toggle_{project_id}", help="Expand/Collapse"):
-                    if is_expanded:
-                        st.session_state.expanded_project_id = None
-                    else:
-                        st.session_state.expanded_project_id = project_id
-                    st.rerun()
+            # Main row for objective (no expand button)
+            col_num, col_title, col_owner, col_progress, col_status = st.columns([0.3, 4, 0.6, 1, 1])
             
             with col_num:
-                st.markdown(f"<span style='font-weight: bold; color: #1E3A5F; font-size: 16px;'>{obj_num}</span>", unsafe_allow_html=True)
+                num_style = "color: white; font-weight: bold;" if is_expanded else "color: #1E3A5F; font-weight: bold;"
+                st.markdown(f"<span style='{num_style} font-size: 16px;'>{obj_num}</span>", unsafe_allow_html=True)
             
             with col_title:
-                # Clickable title - also expands/collapses
-                title_style = "font-weight: bold;" if is_expanded else ""
+                # Clickable title - toggles selection
                 if st.button(
                     project.get('name', 'Unnamed'),
                     key=f"select_{project_id}",
-                    help="Click to expand",
+                    help="Click to view details",
                     use_container_width=True
                 ):
                     if is_expanded:
@@ -1141,8 +1139,11 @@ def render_projects():
                 </div>
                 """, unsafe_allow_html=True)
             
-            # Divider line
-            st.markdown("<hr style='margin: 0; border: none; border-top: 1px solid #eee;'>", unsafe_allow_html=True)
+            # Divider line (darker if selected)
+            if is_expanded:
+                st.markdown("<hr style='margin: 0; border: none; border-top: 2px solid #1a365d;'>", unsafe_allow_html=True)
+            else:
+                st.markdown("<hr style='margin: 0; border: none; border-top: 1px solid #eee;'>", unsafe_allow_html=True)
     
     # SIDEBAR - Project Details (only shows when expanded)
     if st.session_state.expanded_project_id and col_sidebar:
@@ -1167,15 +1168,28 @@ def render_project_sidebar(projects: list):
     
     obj_num = project.get('objective_number', '?')
     
-    # Sidebar styling with background color
+    # Sidebar styling with darker background for contrast
     st.markdown("""
     <style>
     [data-testid="column"]:last-child {
-        background: linear-gradient(180deg, #f0f4f8 0%, #e8eef3 100%);
+        background: #2d3748;
         padding: 20px;
         border-radius: 12px;
-        border: 1px solid #d0d9e3;
-        box-shadow: -2px 0 8px rgba(0,0,0,0.05);
+        border: 1px solid #1a202c;
+        box-shadow: -4px 0 12px rgba(0,0,0,0.15);
+    }
+    [data-testid="column"]:last-child .stMarkdown, 
+    [data-testid="column"]:last-child .stTextArea label,
+    [data-testid="column"]:last-child .stSelectbox label,
+    [data-testid="column"]:last-child .stDateInput label,
+    [data-testid="column"]:last-child p,
+    [data-testid="column"]:last-child span,
+    [data-testid="column"]:last-child h3,
+    [data-testid="column"]:last-child h5 {
+        color: #e2e8f0 !important;
+    }
+    [data-testid="column"]:last-child .stDivider {
+        border-color: #4a5568 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1224,8 +1238,8 @@ def render_project_sidebar(projects: list):
                 except:
                     due_date = None
             
-            # Subtask row with checkbox, name, and due date
-            col_check, col_name = st.columns([0.1, 0.9])
+            # Subtask row: checkbox, name, and due date all on one line
+            col_check, col_name, col_date = st.columns([0.08, 0.55, 0.37])
             
             with col_check:
                 new_completed = st.checkbox(
@@ -1250,10 +1264,6 @@ def render_project_sidebar(projects: list):
                 if new_name != subtask.get('name', ''):
                     update_subtask_field(project_id, sub_idx, 'name', new_name)
             
-            # Due date on its own row
-            col_label, col_date = st.columns([0.3, 0.7])
-            with col_label:
-                st.caption(f"{sub_num} Due:")
             with col_date:
                 new_due = st.date_input(
                     f"Due {sub_num}",
@@ -1263,8 +1273,6 @@ def render_project_sidebar(projects: list):
                 )
                 if new_due != due_date:
                     update_subtask_field(project_id, sub_idx, 'due_date', new_due)
-            
-            st.markdown("<div style='margin-bottom: 8px;'></div>", unsafe_allow_html=True)
     
     # Add subtask button
     if st.button("➕ Add Subtask", key=f"sidebar_add_{project_id}"):
@@ -1389,11 +1397,11 @@ def render_project_sidebar(projects: list):
                 time_str = "Unknown time"
             
             st.markdown(f"""
-            <div style="background: white; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #0d6efd; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
-                <div style="font-size: 11px; color: #888; margin-bottom: 6px;">
+            <div style="background: #4a5568; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #63b3ed;">
+                <div style="font-size: 11px; color: #a0aec0; margin-bottom: 6px;">
                     🕐 {time_str}
                 </div>
-                <div style="color: #333; font-size: 14px;">
+                <div style="color: #e2e8f0; font-size: 14px;">
                     {note.get('text', '')}
                 </div>
             </div>
