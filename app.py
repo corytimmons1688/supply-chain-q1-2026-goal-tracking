@@ -26,6 +26,13 @@ import json
 import copy
 from typing import Dict, List, Optional, Any, Callable
 
+# Import drag-drop sortables
+try:
+    from streamlit_sortables import sort_items
+    SORTABLES_AVAILABLE = True
+except ImportError:
+    SORTABLES_AVAILABLE = False
+
 # Add the project root to path for imports
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 if ROOT_DIR not in sys.path:
@@ -1017,12 +1024,47 @@ def render_projects():
     """Render the projects in an Asana-style board with collapsible items and detail sidebar."""
     projects = load_projects()
     
-    # Initialize session state for expanded project (replaces selected_project_id)
+    # Initialize session state for expanded project
     if 'expanded_project_id' not in st.session_state:
         st.session_state.expanded_project_id = None
     
     # Sort by objective number
     projects_sorted = sorted(projects, key=lambda x: x.get('objective_number', 999))
+    
+    # Global styles
+    st.markdown("""
+    <style>
+    .selected-row {
+        background: rgba(45, 55, 72, 0.15) !important;
+        border-radius: 8px;
+        padding: 12px;
+        margin: 4px 0;
+        border-left: 4px solid #2d3748;
+    }
+    .normal-row {
+        padding: 12px;
+        margin: 4px 0;
+        border-bottom: 1px solid #eee;
+    }
+    .sidebar-container {
+        background: rgba(45, 55, 72, 0.12);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid rgba(45, 55, 72, 0.25);
+    }
+    .owner-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: bold;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
     # Create two-column layout: main content (left) and detail sidebar (right)
     if st.session_state.expanded_project_id:
@@ -1033,34 +1075,6 @@ def render_projects():
     
     # MAIN CONTENT - Project List
     with col_main:
-        st.markdown("""
-        <style>
-        .objective-row {
-            display: flex;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid #e9ecef;
-        }
-        .status-badge {
-            padding: 2px 10px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 500;
-        }
-        .owner-avatar {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            font-weight: bold;
-            color: white;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
         st.markdown("## 📋 Q1 2026 Supply Chain Objectives")
         
         # Iterate through each project
@@ -1075,74 +1089,52 @@ def render_projects():
             completion = project.get('completion_percentage', 0)
             status = project.get('status', 'Not Started')
             
-            # Container for the row - highlight if selected
-            if is_expanded:
-                st.markdown("""
-                <div style="background: rgba(45, 55, 72, 0.1); margin: -10px -20px; padding: 10px 20px; border-radius: 8px;">
-                """, unsafe_allow_html=True)
+            # Status colors
+            status_colors = {
+                'Not Started': ('#6c757d', 'white'),
+                'In Progress': ('#0d6efd', 'white'),
+                'Completed': ('#198754', 'white'),
+                'On Hold': ('#ffc107', 'black')
+            }
+            bg_color, text_color = status_colors.get(status, ('#6c757d', 'white'))
             
-            # Main row for objective (no expand button)
-            col_num, col_title, col_owner, col_progress, col_status = st.columns([0.3, 4, 0.6, 1, 1])
+            # Progress bar color
+            progress_color = "#198754" if completion >= 75 else "#ffc107" if completion >= 25 else "#6c757d"
             
-            with col_num:
-                st.markdown(f"<span style='color: #1E3A5F; font-weight: bold; font-size: 16px;'>{obj_num}</span>", unsafe_allow_html=True)
+            # Row styling based on selection
+            row_class = "selected-row" if is_expanded else "normal-row"
             
-            with col_title:
-                # Clickable title - toggles selection
-                if st.button(
-                    project.get('name', 'Unnamed'),
-                    key=f"select_{project_id}",
-                    help="Click to view details",
-                    use_container_width=True
-                ):
-                    if is_expanded:
-                        st.session_state.expanded_project_id = None
-                    else:
-                        st.session_state.expanded_project_id = project_id
-                    st.rerun()
-            
-            with col_owner:
-                st.markdown(f"""
-                <div style="display: flex; justify-content: center;">
-                    <div class="owner-avatar" style="background: {owner_color};">{owner_initials}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_progress:
-                # Progress indicator
-                progress_color = "#198754" if completion >= 75 else "#ffc107" if completion >= 25 else "#6c757d"
-                st.markdown(f"""
-                <div style="text-align: center;">
-                    <div style="background: #e9ecef; border-radius: 10px; height: 8px; width: 100%; margin-bottom: 4px;">
-                        <div style="background: {progress_color}; width: {completion}%; height: 100%; border-radius: 10px;"></div>
+            # Render the entire row as HTML for consistent styling
+            st.markdown(f"""
+            <div class="{row_class}">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <div style="flex: 0 0 30px; font-weight: bold; color: #1E3A5F; font-size: 16px;">{obj_num}</div>
+                    <div style="flex: 1; font-weight: {'600' if is_expanded else '400'}; color: #1E3A5F;">{project.get('name', 'Unnamed')}</div>
+                    <div style="flex: 0 0 40px; text-align: center;">
+                        <span class="owner-avatar" style="background: {owner_color};">{owner_initials}</span>
                     </div>
-                    <span style="font-size: 11px; color: #666;">{completion}%</span>
+                    <div style="flex: 0 0 80px;">
+                        <div style="background: #e9ecef; border-radius: 10px; height: 8px; width: 100%; margin-bottom: 4px;">
+                            <div style="background: {progress_color}; width: {completion}%; height: 100%; border-radius: 10px;"></div>
+                        </div>
+                        <div style="text-align: center; font-size: 11px; color: #666;">{completion}%</div>
+                    </div>
+                    <div style="flex: 0 0 90px; text-align: center;">
+                        <span style="background: {bg_color}; color: {text_color}; padding: 3px 10px; border-radius: 12px; font-size: 11px;">
+                            {status}
+                        </span>
+                    </div>
                 </div>
-                """, unsafe_allow_html=True)
+            </div>
+            """, unsafe_allow_html=True)
             
-            with col_status:
-                # Status badge
-                status_colors = {
-                    'Not Started': ('#6c757d', 'white'),
-                    'In Progress': ('#0d6efd', 'white'),
-                    'Completed': ('#198754', 'white'),
-                    'On Hold': ('#ffc107', 'black')
-                }
-                bg_color, text_color = status_colors.get(status, ('#6c757d', 'white'))
-                st.markdown(f"""
-                <div style="text-align: center;">
-                    <span style="background: {bg_color}; color: {text_color}; padding: 3px 10px; border-radius: 12px; font-size: 11px;">
-                        {status}
-                    </span>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Divider line
-            st.markdown("<hr style='margin: 0; border: none; border-top: 1px solid #eee;'>", unsafe_allow_html=True)
-            
-            # Close highlight container if selected
-            if is_expanded:
-                st.markdown("</div>", unsafe_allow_html=True)
+            # Invisible button for click handling
+            if st.button(f"Select Objective {obj_num}", key=f"select_{project_id}", use_container_width=True, type="secondary"):
+                if is_expanded:
+                    st.session_state.expanded_project_id = None
+                else:
+                    st.session_state.expanded_project_id = project_id
+                st.rerun()
     
     # SIDEBAR - Project Details (only shows when expanded)
     if st.session_state.expanded_project_id and col_sidebar:
@@ -1169,17 +1161,9 @@ def render_project_sidebar(projects: list):
     
     obj_num = project.get('objective_number', '?')
     
-    # Sidebar styling with semi-transparent dark blue background
+    # Sidebar container with background
     st.markdown("""
-    <style>
-    [data-testid="column"]:last-child {
-        background: rgba(45, 55, 72, 0.1);
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid rgba(45, 55, 72, 0.2);
-        box-shadow: -4px 0 12px rgba(0,0,0,0.08);
-    }
-    </style>
+    <div class="sidebar-container">
     """, unsafe_allow_html=True)
     
     # Sidebar header with close button
@@ -1209,12 +1193,48 @@ def render_project_sidebar(projects: list):
     
     st.divider()
     
-    # SUBTASKS SECTION
+    # SUBTASKS SECTION WITH DRAG-DROP
     st.markdown("##### ✅ Subtasks")
+    st.caption("Drag to reorder")
     
     subtasks = project.get('subtasks', [])
     
-    if subtasks:
+    if subtasks and SORTABLES_AVAILABLE:
+        # Create list of subtask items for drag-drop
+        subtask_items = []
+        for sub_idx, subtask in enumerate(subtasks):
+            sub_num = f"{obj_num}.{sub_idx + 1}"
+            name = subtask.get('name', 'Unnamed')
+            due = subtask.get('due_date', '')
+            if isinstance(due, str) and due:
+                try:
+                    due = datetime.fromisoformat(due).strftime('%m/%d')
+                except:
+                    due = ''
+            completed = "✓" if subtask.get('completed') else "○"
+            subtask_items.append(f"{completed} {name} ({due})")
+        
+        # Drag-drop sortable list
+        sorted_items = sort_items(subtask_items, key=f"subtasks_sort_{project_id}")
+        
+        # Check if order changed
+        if sorted_items != subtask_items:
+            # Reorder subtasks based on new order
+            new_subtasks = []
+            for item in sorted_items:
+                for subtask in subtasks:
+                    name = subtask.get('name', 'Unnamed')
+                    if name in item:
+                        new_subtasks.append(subtask)
+                        break
+            
+            # Update if we found all subtasks
+            if len(new_subtasks) == len(subtasks):
+                reorder_subtasks(project_id, new_subtasks)
+        
+        st.markdown("---")
+        
+        # Editable fields for each subtask
         for sub_idx, subtask in enumerate(subtasks):
             sub_num = f"{obj_num}.{sub_idx + 1}"
             is_completed = subtask.get('completed', False)
@@ -1226,26 +1246,7 @@ def render_project_sidebar(projects: list):
                 except:
                     due_date = None
             
-            # Subtask row: reorder buttons, checkbox, name, and due date
-            col_order, col_check, col_name, col_date = st.columns([0.12, 0.08, 0.45, 0.35])
-            
-            with col_order:
-                # Up/Down buttons for reordering
-                btn_col1, btn_col2 = st.columns(2)
-                with btn_col1:
-                    if sub_idx > 0:
-                        if st.button("↑", key=f"up_{project_id}_{sub_idx}", help="Move up"):
-                            move_subtask(project_id, sub_idx, sub_idx - 1)
-                            st.rerun()
-                    else:
-                        st.write("")  # Placeholder
-                with btn_col2:
-                    if sub_idx < len(subtasks) - 1:
-                        if st.button("↓", key=f"down_{project_id}_{sub_idx}", help="Move down"):
-                            move_subtask(project_id, sub_idx, sub_idx + 1)
-                            st.rerun()
-                    else:
-                        st.write("")  # Placeholder
+            col_check, col_name, col_date = st.columns([0.1, 0.55, 0.35])
             
             with col_check:
                 new_completed = st.checkbox(
@@ -1260,7 +1261,63 @@ def render_project_sidebar(projects: list):
                     st.rerun()
             
             with col_name:
-                # Subtask name (editable)
+                new_name = st.text_input(
+                    f"Task {sub_num}",
+                    value=subtask.get('name', ''),
+                    key=f"sidebar_name_{project_id}_{sub_idx}",
+                    label_visibility="collapsed"
+                )
+                if new_name != subtask.get('name', ''):
+                    update_subtask_field(project_id, sub_idx, 'name', new_name)
+            
+            with col_date:
+                new_due = st.date_input(
+                    f"Due {sub_num}",
+                    value=due_date or date(2026, 3, 31),
+                    key=f"sidebar_due_{project_id}_{sub_idx}",
+                    label_visibility="collapsed"
+                )
+                if new_due != due_date:
+                    update_subtask_field(project_id, sub_idx, 'due_date', new_due)
+    
+    elif subtasks:
+        # Fallback if sortables not available - use up/down buttons
+        for sub_idx, subtask in enumerate(subtasks):
+            sub_num = f"{obj_num}.{sub_idx + 1}"
+            is_completed = subtask.get('completed', False)
+            
+            due_date = subtask.get('due_date')
+            if isinstance(due_date, str):
+                try:
+                    due_date = datetime.fromisoformat(due_date).date()
+                except:
+                    due_date = None
+            
+            col_order, col_check, col_name, col_date = st.columns([0.12, 0.08, 0.45, 0.35])
+            
+            with col_order:
+                if sub_idx > 0:
+                    if st.button("↑", key=f"up_{project_id}_{sub_idx}"):
+                        move_subtask(project_id, sub_idx, sub_idx - 1)
+                        st.rerun()
+                if sub_idx < len(subtasks) - 1:
+                    if st.button("↓", key=f"down_{project_id}_{sub_idx}"):
+                        move_subtask(project_id, sub_idx, sub_idx + 1)
+                        st.rerun()
+            
+            with col_check:
+                new_completed = st.checkbox(
+                    "",
+                    value=is_completed,
+                    key=f"sidebar_check_{project_id}_{sub_idx}",
+                    label_visibility="collapsed"
+                )
+                if new_completed != is_completed:
+                    update_subtask_field(project_id, sub_idx, 'completed', new_completed)
+                    recalculate_completion(project_id)
+                    st.rerun()
+            
+            with col_name:
                 new_name = st.text_input(
                     f"Task {sub_num}",
                     value=subtask.get('name', ''),
@@ -1292,7 +1349,6 @@ def render_project_sidebar(projects: list):
     col1, col2 = st.columns(2)
     
     with col1:
-        # Status
         new_status = st.selectbox(
             "Status",
             options=['Not Started', 'In Progress', 'Completed', 'On Hold'],
@@ -1304,7 +1360,6 @@ def render_project_sidebar(projects: list):
         if new_status != project.get('status'):
             update_project_field(project_id, 'status', new_status)
         
-        # Priority
         new_priority = st.selectbox(
             "Priority",
             options=['High', 'Medium', 'Low'],
@@ -1315,7 +1370,6 @@ def render_project_sidebar(projects: list):
             update_project_field(project_id, 'priority', new_priority)
     
     with col2:
-        # Owner
         new_owner = st.selectbox(
             "Owner",
             options=['Greg Furner', 'Cory Timmons'],
@@ -1325,7 +1379,6 @@ def render_project_sidebar(projects: list):
         if new_owner != project.get('owner'):
             update_project_field(project_id, 'owner', new_owner)
         
-        # Completion (auto-calculated display)
         subtask_completion = 0
         if subtasks:
             completed_count = sum(1 for s in subtasks if s.get('completed'))
@@ -1333,11 +1386,9 @@ def render_project_sidebar(projects: list):
         
         st.metric("Completion", f"{project.get('completion_percentage', subtask_completion)}%")
     
-    # Dates row
     col3, col4 = st.columns(2)
     
     with col3:
-        # Start Date
         start_date = project.get('start_date')
         if isinstance(start_date, str):
             try:
@@ -1349,7 +1400,6 @@ def render_project_sidebar(projects: list):
             update_project_field(project_id, 'start_date', new_start)
     
     with col4:
-        # Due Date
         due_date_proj = project.get('due_date')
         if isinstance(due_date_proj, str):
             try:
@@ -1362,10 +1412,9 @@ def render_project_sidebar(projects: list):
     
     st.divider()
     
-    # NOTES SECTION - At bottom of sidebar
+    # NOTES SECTION
     st.markdown("##### 💬 Notes")
     
-    # Add new note input
     new_note_text = st.text_area(
         "Add a note",
         key=f"new_note_{project_id}",
@@ -1378,13 +1427,11 @@ def render_project_sidebar(projects: list):
             add_note_to_project(project_id, new_note_text.strip())
             st.rerun()
     
-    # Display notes trail
     notes = project.get('notes', [])
     
     if notes:
         st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
         
-        # Sort notes by timestamp (newest first)
         sorted_notes = sorted(
             notes,
             key=lambda x: x.get('timestamp', ''),
@@ -1403,7 +1450,7 @@ def render_project_sidebar(projects: list):
                 time_str = "Unknown time"
             
             st.markdown(f"""
-            <div style="background: rgba(45, 55, 72, 0.15); border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #4A90D9;">
+            <div style="background: rgba(45, 55, 72, 0.2); border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #4A90D9;">
                 <div style="font-size: 11px; color: #666; margin-bottom: 6px;">
                     🕐 {time_str}
                 </div>
@@ -1414,15 +1461,25 @@ def render_project_sidebar(projects: list):
             """, unsafe_allow_html=True)
     else:
         st.caption("No notes yet. Add your first note above!")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def reorder_subtasks(project_id: str, new_subtasks: list):
+    """Reorder subtasks to match new order."""
+    for i, p in enumerate(st.session_state.projects):
+        if p.get('id') == project_id:
+            st.session_state.projects[i]['subtasks'] = new_subtasks
+            break
+    save_projects()
 
 
 def move_subtask(project_id: str, from_idx: int, to_idx: int):
-    """Move a subtask from one position to another."""
+    """Move a subtask from one position to another (swap)."""
     for i, p in enumerate(st.session_state.projects):
         if p.get('id') == project_id:
             subtasks = st.session_state.projects[i].get('subtasks', [])
             if 0 <= from_idx < len(subtasks) and 0 <= to_idx < len(subtasks):
-                # Swap the subtasks
                 subtasks[from_idx], subtasks[to_idx] = subtasks[to_idx], subtasks[from_idx]
                 st.session_state.projects[i]['subtasks'] = subtasks
             break
