@@ -125,11 +125,14 @@ def render_project_editor(project: Dict, key_prefix: str = "") -> Dict:
         # Team members as multiselect
         all_team_members = ['Greg Furner', 'Cory Timmons', 'Legal', 'Finance', 'QA Team', 
                            'Sales Team', 'Production Team', 'IT', 'Facilities', 'HP Technician',
-                           'Dazpak Technical', 'Ross']
+                           'Dazpak Technical', 'Dazpak', 'Ross', 'Growve']
+        current_team = project.get('team_members', [])
+        # Filter to only valid options to prevent StreamlitAPIException
+        valid_defaults = [m for m in current_team if m in all_team_members]
         updates['team_members'] = st.multiselect(
             "Team Members",
             options=all_team_members,
-            default=project.get('team_members', []),
+            default=valid_defaults,
             key=f"{key_prefix}_team"
         )
     
