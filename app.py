@@ -1265,10 +1265,28 @@ def render_project_sidebar(projects: list):
     
     obj_num = project.get('objective_number', '?')
     
+    # Sidebar container with contrasting background
+    st.markdown("""
+    <style>
+    [data-testid="column"]:nth-child(2) {
+        background: linear-gradient(180deg, #f0f4f8 0%, #e8eef3 100%);
+        border-left: 2px solid #d0d7de;
+        padding: 15px;
+        border-radius: 0 8px 8px 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # Sidebar header with close button
+    st.markdown(f"""
+    <div style="background: #1E3A5F; color: white; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 18px; font-weight: bold;">Objective {obj_num}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     col_title, col_close = st.columns([5, 1])
-    with col_title:
-        st.markdown(f"### Objective {obj_num}")
     with col_close:
         if st.button("✕", key="close_sidebar", help="Close sidebar"):
             st.session_state.selected_project_id = None
@@ -1276,195 +1294,152 @@ def render_project_sidebar(projects: list):
     
     st.markdown(f"**{project.get('name', 'Unnamed')}**")
     
-    # Tabs for different sections
-    tab_details, tab_notes = st.tabs(["📝 Details", "💬 Notes"])
+    # DETAILS SECTION
+    st.markdown("---")
     
-    # DETAILS TAB
-    with tab_details:
-        # Goal/Description
-        st.markdown("##### Goal")
-        new_desc = st.text_area(
-            "Description",
-            value=project.get('description', ''),
-            key=f"sidebar_desc_{project_id}",
-            height=100,
-            label_visibility="collapsed"
+    # Goal/Description
+    st.markdown("##### 📋 Goal")
+    new_desc = st.text_area(
+        "Description",
+        value=project.get('description', ''),
+        key=f"sidebar_desc_{project_id}",
+        height=100,
+        label_visibility="collapsed"
+    )
+    if new_desc != project.get('description', ''):
+        update_project_field(project_id, 'description', new_desc)
+    
+    st.markdown("---")
+    
+    # Settings Grid
+    st.markdown("##### ⚙️ Settings")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Status
+        new_status = st.selectbox(
+            "Status",
+            options=['Not Started', 'In Progress', 'Completed', 'On Hold'],
+            index=['Not Started', 'In Progress', 'Completed', 'On Hold'].index(
+                project.get('status', 'Not Started')) if project.get('status') in 
+                ['Not Started', 'In Progress', 'Completed', 'On Hold'] else 0,
+            key=f"sidebar_status_{project_id}"
         )
-        if new_desc != project.get('description', ''):
-            update_project_field(project_id, 'description', new_desc)
+        if new_status != project.get('status'):
+            update_project_field(project_id, 'status', new_status)
         
-        st.divider()
-        
-        # Settings Grid
-        st.markdown("##### Settings")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Status
-            new_status = st.selectbox(
-                "Status",
-                options=['Not Started', 'In Progress', 'Completed', 'On Hold'],
-                index=['Not Started', 'In Progress', 'Completed', 'On Hold'].index(
-                    project.get('status', 'Not Started')) if project.get('status') in 
-                    ['Not Started', 'In Progress', 'Completed', 'On Hold'] else 0,
-                key=f"sidebar_status_{project_id}"
-            )
-            if new_status != project.get('status'):
-                update_project_field(project_id, 'status', new_status)
-            
-            # Priority
-            new_priority = st.selectbox(
-                "Priority",
-                options=['High', 'Medium', 'Low'],
-                index=['High', 'Medium', 'Low'].index(project.get('priority', 'Medium')),
-                key=f"sidebar_priority_{project_id}"
-            )
-            if new_priority != project.get('priority'):
-                update_project_field(project_id, 'priority', new_priority)
-            
-            # Start Date
-            start_date = project.get('start_date')
-            if isinstance(start_date, str):
-                try:
-                    start_date = datetime.fromisoformat(start_date).date()
-                except:
-                    start_date = date(2026, 1, 6)
-            new_start = st.date_input("Start Date", value=start_date or date(2026, 1, 6), key=f"sidebar_start_{project_id}")
-            if new_start != start_date:
-                update_project_field(project_id, 'start_date', new_start)
-        
-        with col2:
-            # Owner
-            new_owner = st.selectbox(
-                "Owner",
-                options=['Greg Furner', 'Cory Timmons'],
-                index=0 if 'Greg' in project.get('owner', '') else 1,
-                key=f"sidebar_owner_{project_id}"
-            )
-            if new_owner != project.get('owner'):
-                update_project_field(project_id, 'owner', new_owner)
-            
-            # Due Date
-            due_date = project.get('due_date')
-            if isinstance(due_date, str):
-                try:
-                    due_date = datetime.fromisoformat(due_date).date()
-                except:
-                    due_date = date(2026, 3, 31)
-            new_due = st.date_input("Due Date", value=due_date or date(2026, 3, 31), key=f"sidebar_due_{project_id}")
-            if new_due != due_date:
-                update_project_field(project_id, 'due_date', new_due)
-            
-            # Completion
-            new_completion = st.slider(
-                "Completion %",
-                min_value=0,
-                max_value=100,
-                value=project.get('completion_percentage', 0),
-                key=f"sidebar_completion_{project_id}"
-            )
-            if new_completion != project.get('completion_percentage', 0):
-                update_project_field(project_id, 'completion_percentage', new_completion)
-        
-        st.divider()
-        
-        # Budget section
-        st.markdown("##### Budget & Hours")
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            new_budget = st.number_input(
-                "Budget ($)",
-                min_value=0,
-                value=project.get('budget', 0),
-                key=f"sidebar_budget_{project_id}"
-            )
-            if new_budget != project.get('budget', 0):
-                update_project_field(project_id, 'budget', new_budget)
-            
-            new_hours = st.number_input(
-                "Est. Hours",
-                min_value=0,
-                value=project.get('estimated_hours', 0),
-                key=f"sidebar_hours_{project_id}"
-            )
-            if new_hours != project.get('estimated_hours', 0):
-                update_project_field(project_id, 'estimated_hours', new_hours)
-        
-        with col4:
-            new_spent = st.number_input(
-                "Spent ($)",
-                min_value=0,
-                value=project.get('budget_spent', 0),
-                key=f"sidebar_spent_{project_id}"
-            )
-            if new_spent != project.get('budget_spent', 0):
-                update_project_field(project_id, 'budget_spent', new_spent)
-            
-            new_actual = st.number_input(
-                "Actual Hours",
-                min_value=0,
-                value=project.get('actual_hours', 0),
-                key=f"sidebar_actual_{project_id}"
-            )
-            if new_actual != project.get('actual_hours', 0):
-                update_project_field(project_id, 'actual_hours', new_actual)
+        # Start Date
+        start_date = project.get('start_date')
+        if isinstance(start_date, str):
+            try:
+                start_date = datetime.fromisoformat(start_date).date()
+            except:
+                start_date = date(2026, 1, 6)
+        new_start = st.date_input("Start Date", value=start_date or date(2026, 1, 6), key=f"sidebar_start_{project_id}")
+        if new_start != start_date:
+            update_project_field(project_id, 'start_date', new_start)
     
-    # NOTES TAB
-    with tab_notes:
-        st.markdown("##### Activity & Notes")
+    with col2:
+        # Owner
+        new_owner = st.selectbox(
+            "Owner",
+            options=['Greg Furner', 'Cory Timmons'],
+            index=0 if 'Greg' in project.get('owner', '') else 1,
+            key=f"sidebar_owner_{project_id}"
+        )
+        if new_owner != project.get('owner'):
+            update_project_field(project_id, 'owner', new_owner)
         
-        # Add new note input
-        new_note_text = st.text_area(
-            "Add a note",
-            key=f"new_note_{project_id}",
-            height=80,
-            placeholder="Type your note and click Add..."
+        # Due Date
+        due_date = project.get('due_date')
+        if isinstance(due_date, str):
+            try:
+                due_date = datetime.fromisoformat(due_date).date()
+            except:
+                due_date = date(2026, 3, 31)
+        new_due = st.date_input("Due Date", value=due_date or date(2026, 3, 31), key=f"sidebar_due_{project_id}")
+        if new_due != due_date:
+            update_project_field(project_id, 'due_date', new_due)
+    
+    # Priority and Completion on same row
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        new_priority = st.selectbox(
+            "Priority",
+            options=['High', 'Medium', 'Low'],
+            index=['High', 'Medium', 'Low'].index(project.get('priority', 'Medium')),
+            key=f"sidebar_priority_{project_id}"
+        )
+        if new_priority != project.get('priority'):
+            update_project_field(project_id, 'priority', new_priority)
+    
+    with col4:
+        new_completion = st.slider(
+            "Completion %",
+            min_value=0,
+            max_value=100,
+            value=project.get('completion_percentage', 0),
+            key=f"sidebar_completion_{project_id}"
+        )
+        if new_completion != project.get('completion_percentage', 0):
+            update_project_field(project_id, 'completion_percentage', new_completion)
+    
+    st.markdown("---")
+    
+    # NOTES SECTION (at bottom)
+    st.markdown("##### 💬 Notes")
+    
+    # Add new note input
+    new_note_text = st.text_area(
+        "Add a note",
+        key=f"new_note_{project_id}",
+        height=80,
+        placeholder="Type your note and click Add..."
+    )
+    
+    if st.button("💬 Add Note", key=f"submit_note_{project_id}", type="primary", use_container_width=True):
+        if new_note_text.strip():
+            add_note_to_project(project_id, new_note_text.strip())
+            st.rerun()
+    
+    # Display notes trail
+    notes = project.get('notes', [])
+    
+    if notes:
+        st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+        
+        # Sort notes by timestamp (newest first)
+        sorted_notes = sorted(
+            notes,
+            key=lambda x: x.get('timestamp', ''),
+            reverse=True
         )
         
-        if st.button("💬 Add Note", key=f"submit_note_{project_id}", type="primary", use_container_width=True):
-            if new_note_text.strip():
-                add_note_to_project(project_id, new_note_text.strip())
-                st.rerun()
-        
-        st.divider()
-        
-        # Display notes trail
-        notes = project.get('notes', [])
-        
-        if notes:
-            st.markdown("##### Note History")
-            # Sort notes by timestamp (newest first)
-            sorted_notes = sorted(
-                notes,
-                key=lambda x: x.get('timestamp', ''),
-                reverse=True
-            )
+        for note in sorted_notes:
+            timestamp = note.get('timestamp', '')
+            if isinstance(timestamp, str) and timestamp:
+                try:
+                    dt = datetime.fromisoformat(timestamp)
+                    time_str = dt.strftime('%b %d, %Y at %I:%M %p')
+                except:
+                    time_str = timestamp
+            else:
+                time_str = "Unknown time"
             
-            for note in sorted_notes:
-                timestamp = note.get('timestamp', '')
-                if isinstance(timestamp, str) and timestamp:
-                    try:
-                        dt = datetime.fromisoformat(timestamp)
-                        time_str = dt.strftime('%b %d, %Y at %I:%M %p')
-                    except:
-                        time_str = timestamp
-                else:
-                    time_str = "Unknown time"
-                
-                st.markdown(f"""
-                <div style="background: #f8f9fa; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #0d6efd;">
-                    <div style="font-size: 11px; color: #666; margin-bottom: 6px;">
-                        🕐 {time_str}
-                    </div>
-                    <div style="color: #333;">
-                        {note.get('text', '')}
-                    </div>
+            st.markdown(f"""
+            <div style="background: white; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #0d6efd; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <div style="font-size: 11px; color: #666; margin-bottom: 6px;">
+                    🕐 {time_str}
                 </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("No notes yet. Add your first note above!")
+                <div style="color: #333;">
+                    {note.get('text', '')}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("No notes yet. Add your first note above!")
 
 
 def add_note_to_project(project_id: str, note_text: str):
