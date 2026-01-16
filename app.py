@@ -426,8 +426,8 @@ except ImportError:
             due_date = project.get('due_date')
             if isinstance(start_date, str): start_date = datetime.fromisoformat(start_date).date()
             if isinstance(due_date, str): due_date = datetime.fromisoformat(due_date).date()
-            updates['start_date'] = st.date_input("Start Date", value=start_date or date(2026, 1, 6), key=f"{key_prefix}_start")
-            updates['due_date'] = st.date_input("Due Date", value=due_date or date(2026, 3, 31), key=f"{key_prefix}_due")
+            updates['start_date'] = st.date_input("Start Date", value=start_date or date(2026, 1, 6), key=f"{key_prefix}_start", format="MM/DD/YYYY")
+            updates['due_date'] = st.date_input("Due Date", value=due_date or date(2026, 3, 31), key=f"{key_prefix}_due", format="MM/DD/YYYY")
         with st.expander("Additional Details", expanded=False):
             col3, col4 = st.columns(2)
             with col3:
@@ -456,12 +456,12 @@ except ImportError:
             updates['completion_criteria'] = st.text_area("Completion Criteria", value=subtask.get('completion_criteria', ''), height=80, key=f"{key_prefix}_criteria")
             start_date = subtask.get('start_date')
             if isinstance(start_date, str): start_date = datetime.fromisoformat(start_date).date()
-            updates['start_date'] = st.date_input("Start Date", value=start_date or date(2026, 1, 6), key=f"{key_prefix}_start")
+            updates['start_date'] = st.date_input("Start Date", value=start_date or date(2026, 1, 6), key=f"{key_prefix}_start", format="MM/DD/YYYY")
         with col4:
             updates['success_metric'] = st.text_area("Success Metric", value=subtask.get('success_metric', ''), height=80, key=f"{key_prefix}_metric")
             due_date = subtask.get('due_date')
             if isinstance(due_date, str): due_date = datetime.fromisoformat(due_date).date()
-            updates['due_date'] = st.date_input("Due Date", value=due_date or date(2026, 1, 31), key=f"{key_prefix}_due")
+            updates['due_date'] = st.date_input("Due Date", value=due_date or date(2026, 1, 31), key=f"{key_prefix}_due", format="MM/DD/YYYY")
         updates['owner'] = st.text_input("Owner", value=subtask.get('owner', ''), key=f"{key_prefix}_owner")
         updates['dependencies'] = st.text_area("Dependencies", value=subtask.get('dependencies', ''), height=60, key=f"{key_prefix}_deps")
         return updates
@@ -1255,7 +1255,8 @@ def render_project_sidebar(projects: list):
                     "Due",
                     value=due_date or date(2026, 3, 31),
                     key=f"due_{project_id}_{sub_idx}",
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    format="MM/DD/YYYY"
                 )
                 if new_due != due_date:
                     update_subtask_field(project_id, sub_idx, 'due_date', new_due)
@@ -1333,7 +1334,7 @@ def render_project_sidebar(projects: list):
                 start_date = datetime.fromisoformat(start_date).date()
             except:
                 start_date = date(2026, 1, 6)
-        new_start = st.date_input("Start", value=start_date or date(2026, 1, 6), key=f"start_{project_id}")
+        new_start = st.date_input("Start", value=start_date or date(2026, 1, 6), key=f"start_{project_id}", format="MM/DD/YYYY")
         if new_start != start_date:
             update_project_field(project_id, 'start_date', new_start)
     
@@ -1344,7 +1345,7 @@ def render_project_sidebar(projects: list):
                 due_date_proj = datetime.fromisoformat(due_date_proj).date()
             except:
                 due_date_proj = date(2026, 3, 31)
-        new_due_proj = st.date_input("Due", value=due_date_proj or date(2026, 3, 31), key=f"projdue_{project_id}")
+        new_due_proj = st.date_input("Due", value=due_date_proj or date(2026, 3, 31), key=f"projdue_{project_id}", format="MM/DD/YYYY")
         if new_due_proj != due_date_proj:
             update_project_field(project_id, 'due_date', new_due_proj)
     
