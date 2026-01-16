@@ -1010,212 +1010,479 @@ def render_timeline():
 
 
 # =============================================================================
-# PROJECTS PAGE - SPREADSHEET STYLE
+# PROJECTS PAGE - ASANA STYLE
 # =============================================================================
 
 def render_projects():
-    """Render the projects in a spreadsheet-like format with inline editing."""
+    """Render the projects in an Asana-style board with collapsible items and detail sidebar."""
     projects = load_projects()
     
-    st.markdown("## 📋 Q1 2026 Supply Chain Objectives")
-    st.markdown("*Click on any field to edit. Changes save automatically.*")
+    # Initialize session state for selected project
+    if 'selected_project_id' not in st.session_state:
+        st.session_state.selected_project_id = None
     
     # Sort by objective number
     projects_sorted = sorted(projects, key=lambda x: x.get('objective_number', 999))
     
-    # Iterate through each project
-    for proj_idx, project in enumerate(projects_sorted):
-        project_id = project.get('id', f'proj_{proj_idx}')
-        obj_num = project.get('objective_number', '?')
-        owner = project.get('owner', 'Unassigned')
-        owner_short = owner.split()[0] if owner else 'TBD'  # First name only
-        
-        # Determine row color based on owner
-        row_color = "#d4e5f7" if owner_short == "Greg" else "#d4f7d4" if owner_short == "Cory" else "#f0f0f0"
-        
-        # Main objective row
-        st.markdown(f"""
-        <div style="background: {row_color}; padding: 10px 15px; border-radius: 6px 6px 0 0; margin-top: 15px; border: 1px solid #ccc; border-bottom: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="flex: 0 0 40px; font-weight: bold; font-size: 18px; color: #1E3A5F;">{obj_num}</div>
-                <div style="flex: 1; font-weight: bold; color: #1E3A5F;">{project.get('name', 'Unnamed Objective')}</div>
-                <div style="flex: 0 0 80px; text-align: center; font-weight: bold;">{owner_short}</div>
-                <div style="flex: 0 0 100px; text-align: center;">
-                    <span style="background: {'#198754' if project.get('status') == 'Completed' else '#0d6efd' if project.get('status') == 'In Progress' else '#6c757d'}; 
-                           color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">
-                        {project.get('completion_percentage', 0)}%
-                    </span>
-                </div>
-            </div>
-        </div>
+    # Create two-column layout: main content (left) and detail sidebar (right)
+    if st.session_state.selected_project_id:
+        col_main, col_sidebar = st.columns([3, 2])
+    else:
+        col_main = st.container()
+        col_sidebar = None
+    
+    # MAIN CONTENT - Project List
+    with col_main:
+        st.markdown("""
+        <style>
+        .objective-header {
+            background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 2px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .objective-header:hover {
+            background: linear-gradient(90deg, #e9ecef 0%, #dee2e6 100%);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .objective-header.selected {
+            border-left: 4px solid #0d6efd;
+            background: linear-gradient(90deg, #e7f1ff 0%, #f0f7ff 100%);
+        }
+        .subtask-row {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-top: none;
+            padding: 8px 16px 8px 48px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .subtask-row:last-child {
+            border-radius: 0 0 8px 8px;
+            margin-bottom: 12px;
+        }
+        .status-badge {
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .owner-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: bold;
+            color: white;
+        }
+        </style>
         """, unsafe_allow_html=True)
         
-        # Expandable content area
-        with st.container():
-            # Goal row
-            col_label, col_content = st.columns([1, 6])
-            with col_label:
-                st.markdown("**Goal:**")
-            with col_content:
-                new_desc = st.text_area(
-                    "Goal",
-                    value=project.get('description', ''),
-                    key=f"goal_{project_id}",
-                    height=60,
-                    label_visibility="collapsed"
-                )
-                if new_desc != project.get('description', ''):
-                    update_project_field(project_id, 'description', new_desc)
+        st.markdown("## 📋 Q1 2026 Supply Chain Objectives")
+        st.caption("Click on an objective to view details and settings in the sidebar →")
+        
+        # Iterate through each project
+        for proj_idx, project in enumerate(projects_sorted):
+            project_id = project.get('id', f'proj_{proj_idx}')
+            obj_num = project.get('objective_number', '?')
+            owner = project.get('owner', 'Unassigned')
+            owner_initials = ''.join([n[0] for n in owner.split()[:2]]) if owner else '??'
+            owner_color = "#4A90D9" if "Greg" in owner else "#50C878" if "Cory" in owner else "#888"
             
-            # Subtasks section
-            subtasks = project.get('subtasks', [])
-            for sub_idx, subtask in enumerate(subtasks):
-                sub_num = f"{obj_num}.{sub_idx + 1}"
-                
-                col1, col2, col3, col4 = st.columns([0.8, 4, 1.5, 0.7])
-                
-                with col1:
-                    st.markdown(f"<div style='padding-top: 5px; color: #666;'>{sub_num}</div>", unsafe_allow_html=True)
-                
-                with col2:
-                    new_name = st.text_input(
-                        f"Subtask {sub_num}",
-                        value=subtask.get('name', ''),
-                        key=f"subtask_name_{project_id}_{sub_idx}",
-                        label_visibility="collapsed"
-                    )
-                    if new_name != subtask.get('name', ''):
-                        update_subtask_field(project_id, sub_idx, 'name', new_name)
-                
-                with col3:
-                    # Due date
-                    due_date = subtask.get('due_date')
-                    if isinstance(due_date, str):
-                        try:
-                            due_date = datetime.fromisoformat(due_date).date()
-                        except:
-                            due_date = date(2026, 1, 31)
-                    new_due = st.date_input(
-                        f"Due {sub_num}",
-                        value=due_date or date(2026, 1, 31),
-                        key=f"subtask_due_{project_id}_{sub_idx}",
-                        label_visibility="collapsed"
-                    )
-                    if new_due != due_date:
-                        update_subtask_field(project_id, sub_idx, 'due_date', new_due)
-                
-                with col4:
-                    # Completion checkbox
-                    is_complete = st.checkbox(
-                        "Done",
-                        value=subtask.get('completed', False),
-                        key=f"subtask_done_{project_id}_{sub_idx}",
-                        label_visibility="collapsed"
-                    )
-                    if is_complete != subtask.get('completed', False):
-                        update_subtask_field(project_id, sub_idx, 'completed', is_complete)
-                        recalculate_completion(project_id)
+            is_selected = st.session_state.selected_project_id == project_id
+            completion = project.get('completion_percentage', 0)
+            status = project.get('status', 'Not Started')
             
-            # Add subtask button
-            col_add, col_spacer = st.columns([1, 5])
-            with col_add:
-                if st.button(f"➕ Add Subtask", key=f"add_sub_{project_id}", use_container_width=True):
-                    add_new_subtask(project_id, obj_num, len(subtasks))
+            # Check if this objective is expanded
+            expand_key = f"expand_{project_id}"
+            if expand_key not in st.session_state:
+                st.session_state[expand_key] = False
             
-            # Notes section
-            st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-            col_notes_label, col_notes = st.columns([1, 6])
-            with col_notes_label:
-                st.markdown("**Notes:**")
-            with col_notes:
-                current_notes = project.get('notes', [])
-                notes_text = '\n'.join([n.get('text', '') for n in current_notes]) if current_notes else ''
-                new_notes = st.text_area(
-                    "Notes",
-                    value=notes_text,
-                    key=f"notes_{project_id}",
-                    height=60,
-                    placeholder="Add notes here...",
-                    label_visibility="collapsed"
-                )
-                if new_notes != notes_text:
-                    # Convert text back to notes format
-                    if new_notes.strip():
-                        updated_notes = [{'text': new_notes.strip(), 'timestamp': datetime.now().isoformat()}]
-                    else:
-                        updated_notes = []
-                    update_project_field(project_id, 'notes', updated_notes)
+            # Objective Header Row
+            header_col1, header_col2 = st.columns([6, 1])
             
-            # Project details expander
-            with st.expander(f"📊 Details & Settings for Objective {obj_num}"):
-                col_a, col_b, col_c, col_d = st.columns(4)
+            with header_col1:
+                # Expand/collapse button + objective info
+                col_expand, col_num, col_title, col_owner, col_progress = st.columns([0.4, 0.4, 4, 0.8, 1])
                 
-                with col_a:
-                    new_status = st.selectbox(
-                        "Status",
-                        options=['Not Started', 'In Progress', 'Completed', 'On Hold'],
-                        index=['Not Started', 'In Progress', 'Completed', 'On Hold'].index(
-                            project.get('status', 'Not Started')) if project.get('status') in 
-                            ['Not Started', 'In Progress', 'Completed', 'On Hold'] else 0,
-                        key=f"status_{project_id}"
-                    )
-                    if new_status != project.get('status'):
-                        update_project_field(project_id, 'status', new_status)
+                with col_expand:
+                    expand_icon = "▼" if st.session_state[expand_key] else "▶"
+                    if st.button(expand_icon, key=f"toggle_{project_id}", help="Expand/Collapse"):
+                        st.session_state[expand_key] = not st.session_state[expand_key]
+                        st.rerun()
+                
+                with col_num:
+                    st.markdown(f"<span style='font-weight: bold; color: #1E3A5F; font-size: 16px;'>{obj_num}</span>", unsafe_allow_html=True)
+                
+                with col_title:
+                    # Clickable title to select project
+                    if st.button(
+                        f"**{project.get('name', 'Unnamed')}**",
+                        key=f"select_{project_id}",
+                        help="Click to view details",
+                        use_container_width=True
+                    ):
+                        st.session_state.selected_project_id = project_id
+                        st.rerun()
+                
+                with col_owner:
+                    st.markdown(f"""
+                    <div style="display: flex; justify-content: center;">
+                        <div class="owner-avatar" style="background: {owner_color};">{owner_initials}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col_progress:
+                    # Progress indicator
+                    progress_color = "#198754" if completion >= 75 else "#ffc107" if completion >= 25 else "#6c757d"
+                    st.markdown(f"""
+                    <div style="text-align: center;">
+                        <div style="background: #e9ecef; border-radius: 10px; height: 8px; width: 100%; margin-bottom: 4px;">
+                            <div style="background: {progress_color}; width: {completion}%; height: 100%; border-radius: 10px;"></div>
+                        </div>
+                        <span style="font-size: 11px; color: #666;">{completion}%</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with header_col2:
+                # Status badge
+                status_colors = {
+                    'Not Started': ('#6c757d', 'white'),
+                    'In Progress': ('#0d6efd', 'white'),
+                    'Completed': ('#198754', 'white'),
+                    'On Hold': ('#ffc107', 'black')
+                }
+                bg_color, text_color = status_colors.get(status, ('#6c757d', 'white'))
+                st.markdown(f"""
+                <div style="text-align: center; padding-top: 5px;">
+                    <span style="background: {bg_color}; color: {text_color}; padding: 3px 10px; border-radius: 12px; font-size: 11px;">
+                        {status}
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Expanded content - Subtasks
+            if st.session_state[expand_key]:
+                subtasks = project.get('subtasks', [])
+                
+                # Container for subtasks with indentation
+                with st.container():
+                    st.markdown("<div style='margin-left: 20px; border-left: 2px solid #dee2e6; padding-left: 15px;'>", unsafe_allow_html=True)
                     
-                    new_priority = st.selectbox(
-                        "Priority",
-                        options=['High', 'Medium', 'Low'],
-                        index=['High', 'Medium', 'Low'].index(project.get('priority', 'Medium')),
-                        key=f"priority_{project_id}"
-                    )
-                    if new_priority != project.get('priority'):
-                        update_project_field(project_id, 'priority', new_priority)
-                
-                with col_b:
-                    new_owner = st.selectbox(
-                        "Owner",
-                        options=['Greg Furner', 'Cory Timmons'],
-                        index=0 if project.get('owner', '').startswith('Greg') else 1,
-                        key=f"owner_{project_id}"
-                    )
-                    if new_owner != project.get('owner'):
-                        update_project_field(project_id, 'owner', new_owner)
+                    for sub_idx, subtask in enumerate(subtasks):
+                        sub_num = f"{obj_num}.{sub_idx + 1}"
+                        is_completed = subtask.get('completed', False)
+                        
+                        due_date = subtask.get('due_date')
+                        if isinstance(due_date, str):
+                            try:
+                                due_date = datetime.fromisoformat(due_date).date()
+                            except:
+                                due_date = None
+                        
+                        is_overdue = due_date and due_date < date.today() and not is_completed
+                        
+                        # Subtask row
+                        sub_col1, sub_col2, sub_col3, sub_col4 = st.columns([0.5, 4, 1.2, 0.5])
+                        
+                        with sub_col1:
+                            # Checkbox
+                            new_completed = st.checkbox(
+                                "",
+                                value=is_completed,
+                                key=f"check_{project_id}_{sub_idx}",
+                                label_visibility="collapsed"
+                            )
+                            if new_completed != is_completed:
+                                update_subtask_field(project_id, sub_idx, 'completed', new_completed)
+                                recalculate_completion(project_id)
+                                st.rerun()
+                        
+                        with sub_col2:
+                            # Subtask name (editable)
+                            task_style = "text-decoration: line-through; color: #888;" if is_completed else ""
+                            new_name = st.text_input(
+                                f"Task {sub_num}",
+                                value=subtask.get('name', ''),
+                                key=f"name_{project_id}_{sub_idx}",
+                                label_visibility="collapsed"
+                            )
+                            if new_name != subtask.get('name', ''):
+                                update_subtask_field(project_id, sub_idx, 'name', new_name)
+                        
+                        with sub_col3:
+                            # Due date with color coding
+                            date_color = "#dc3545" if is_overdue else "#666"
+                            new_due = st.date_input(
+                                f"Due {sub_num}",
+                                value=due_date or date(2026, 3, 31),
+                                key=f"due_{project_id}_{sub_idx}",
+                                label_visibility="collapsed"
+                            )
+                            if new_due != due_date:
+                                update_subtask_field(project_id, sub_idx, 'due_date', new_due)
+                        
+                        with sub_col4:
+                            # Subtask number label
+                            st.markdown(f"<span style='color: #aaa; font-size: 12px;'>{sub_num}</span>", unsafe_allow_html=True)
                     
-                    start_date = project.get('start_date')
-                    if isinstance(start_date, str):
-                        try:
-                            start_date = datetime.fromisoformat(start_date).date()
-                        except:
-                            start_date = date(2026, 1, 6)
-                    new_start = st.date_input("Start Date", value=start_date or date(2026, 1, 6), key=f"start_{project_id}")
-                    if new_start != start_date:
-                        update_project_field(project_id, 'start_date', new_start)
-                
-                with col_c:
-                    due_date = project.get('due_date')
-                    if isinstance(due_date, str):
-                        try:
-                            due_date = datetime.fromisoformat(due_date).date()
-                        except:
-                            due_date = date(2026, 3, 31)
-                    new_due = st.date_input("Due Date", value=due_date or date(2026, 3, 31), key=f"due_{project_id}")
-                    if new_due != due_date:
-                        update_project_field(project_id, 'due_date', new_due)
+                    # Add subtask button
+                    if st.button(f"➕ Add subtask", key=f"add_{project_id}"):
+                        add_new_subtask(project_id, obj_num, len(subtasks))
                     
-                    new_budget = st.number_input("Budget ($)", min_value=0, value=project.get('budget', 0), key=f"budget_{project_id}")
-                    if new_budget != project.get('budget', 0):
-                        update_project_field(project_id, 'budget', new_budget)
-                
-                with col_d:
-                    new_hours = st.number_input("Est. Hours", min_value=0, value=project.get('estimated_hours', 0), key=f"hours_{project_id}")
-                    if new_hours != project.get('estimated_hours', 0):
-                        update_project_field(project_id, 'estimated_hours', new_hours)
-                    
-                    new_spent = st.number_input("Budget Spent ($)", min_value=0, value=project.get('budget_spent', 0), key=f"spent_{project_id}")
-                    if new_spent != project.get('budget_spent', 0):
-                        update_project_field(project_id, 'budget_spent', new_spent)
+                    st.markdown("</div>", unsafe_allow_html=True)
             
-            st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #ddd;'>", unsafe_allow_html=True)
+            # Visual separator
+            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+    
+    # SIDEBAR - Project Details
+    if st.session_state.selected_project_id and col_sidebar:
+        with col_sidebar:
+            render_project_sidebar(projects_sorted)
+
+
+def render_project_sidebar(projects: list):
+    """Render the detail sidebar for the selected project."""
+    project_id = st.session_state.selected_project_id
+    project = None
+    
+    for p in projects:
+        if p.get('id') == project_id:
+            project = p
+            break
+    
+    if not project:
+        st.session_state.selected_project_id = None
+        st.rerun()
+        return
+    
+    obj_num = project.get('objective_number', '?')
+    
+    # Sidebar header with close button
+    col_title, col_close = st.columns([5, 1])
+    with col_title:
+        st.markdown(f"### Objective {obj_num}")
+    with col_close:
+        if st.button("✕", key="close_sidebar", help="Close sidebar"):
+            st.session_state.selected_project_id = None
+            st.rerun()
+    
+    st.markdown(f"**{project.get('name', 'Unnamed')}**")
+    
+    # Tabs for different sections
+    tab_details, tab_notes = st.tabs(["📝 Details", "💬 Notes"])
+    
+    # DETAILS TAB
+    with tab_details:
+        # Goal/Description
+        st.markdown("##### Goal")
+        new_desc = st.text_area(
+            "Description",
+            value=project.get('description', ''),
+            key=f"sidebar_desc_{project_id}",
+            height=100,
+            label_visibility="collapsed"
+        )
+        if new_desc != project.get('description', ''):
+            update_project_field(project_id, 'description', new_desc)
+        
+        st.divider()
+        
+        # Settings Grid
+        st.markdown("##### Settings")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Status
+            new_status = st.selectbox(
+                "Status",
+                options=['Not Started', 'In Progress', 'Completed', 'On Hold'],
+                index=['Not Started', 'In Progress', 'Completed', 'On Hold'].index(
+                    project.get('status', 'Not Started')) if project.get('status') in 
+                    ['Not Started', 'In Progress', 'Completed', 'On Hold'] else 0,
+                key=f"sidebar_status_{project_id}"
+            )
+            if new_status != project.get('status'):
+                update_project_field(project_id, 'status', new_status)
+            
+            # Priority
+            new_priority = st.selectbox(
+                "Priority",
+                options=['High', 'Medium', 'Low'],
+                index=['High', 'Medium', 'Low'].index(project.get('priority', 'Medium')),
+                key=f"sidebar_priority_{project_id}"
+            )
+            if new_priority != project.get('priority'):
+                update_project_field(project_id, 'priority', new_priority)
+            
+            # Start Date
+            start_date = project.get('start_date')
+            if isinstance(start_date, str):
+                try:
+                    start_date = datetime.fromisoformat(start_date).date()
+                except:
+                    start_date = date(2026, 1, 6)
+            new_start = st.date_input("Start Date", value=start_date or date(2026, 1, 6), key=f"sidebar_start_{project_id}")
+            if new_start != start_date:
+                update_project_field(project_id, 'start_date', new_start)
+        
+        with col2:
+            # Owner
+            new_owner = st.selectbox(
+                "Owner",
+                options=['Greg Furner', 'Cory Timmons'],
+                index=0 if 'Greg' in project.get('owner', '') else 1,
+                key=f"sidebar_owner_{project_id}"
+            )
+            if new_owner != project.get('owner'):
+                update_project_field(project_id, 'owner', new_owner)
+            
+            # Due Date
+            due_date = project.get('due_date')
+            if isinstance(due_date, str):
+                try:
+                    due_date = datetime.fromisoformat(due_date).date()
+                except:
+                    due_date = date(2026, 3, 31)
+            new_due = st.date_input("Due Date", value=due_date or date(2026, 3, 31), key=f"sidebar_due_{project_id}")
+            if new_due != due_date:
+                update_project_field(project_id, 'due_date', new_due)
+            
+            # Completion
+            new_completion = st.slider(
+                "Completion %",
+                min_value=0,
+                max_value=100,
+                value=project.get('completion_percentage', 0),
+                key=f"sidebar_completion_{project_id}"
+            )
+            if new_completion != project.get('completion_percentage', 0):
+                update_project_field(project_id, 'completion_percentage', new_completion)
+        
+        st.divider()
+        
+        # Budget section
+        st.markdown("##### Budget & Hours")
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            new_budget = st.number_input(
+                "Budget ($)",
+                min_value=0,
+                value=project.get('budget', 0),
+                key=f"sidebar_budget_{project_id}"
+            )
+            if new_budget != project.get('budget', 0):
+                update_project_field(project_id, 'budget', new_budget)
+            
+            new_hours = st.number_input(
+                "Est. Hours",
+                min_value=0,
+                value=project.get('estimated_hours', 0),
+                key=f"sidebar_hours_{project_id}"
+            )
+            if new_hours != project.get('estimated_hours', 0):
+                update_project_field(project_id, 'estimated_hours', new_hours)
+        
+        with col4:
+            new_spent = st.number_input(
+                "Spent ($)",
+                min_value=0,
+                value=project.get('budget_spent', 0),
+                key=f"sidebar_spent_{project_id}"
+            )
+            if new_spent != project.get('budget_spent', 0):
+                update_project_field(project_id, 'budget_spent', new_spent)
+            
+            new_actual = st.number_input(
+                "Actual Hours",
+                min_value=0,
+                value=project.get('actual_hours', 0),
+                key=f"sidebar_actual_{project_id}"
+            )
+            if new_actual != project.get('actual_hours', 0):
+                update_project_field(project_id, 'actual_hours', new_actual)
+    
+    # NOTES TAB
+    with tab_notes:
+        st.markdown("##### Activity & Notes")
+        
+        # Add new note input
+        new_note_text = st.text_area(
+            "Add a note",
+            key=f"new_note_{project_id}",
+            height=80,
+            placeholder="Type your note and click Add..."
+        )
+        
+        if st.button("💬 Add Note", key=f"submit_note_{project_id}", type="primary", use_container_width=True):
+            if new_note_text.strip():
+                add_note_to_project(project_id, new_note_text.strip())
+                st.rerun()
+        
+        st.divider()
+        
+        # Display notes trail
+        notes = project.get('notes', [])
+        
+        if notes:
+            st.markdown("##### Note History")
+            # Sort notes by timestamp (newest first)
+            sorted_notes = sorted(
+                notes,
+                key=lambda x: x.get('timestamp', ''),
+                reverse=True
+            )
+            
+            for note in sorted_notes:
+                timestamp = note.get('timestamp', '')
+                if isinstance(timestamp, str) and timestamp:
+                    try:
+                        dt = datetime.fromisoformat(timestamp)
+                        time_str = dt.strftime('%b %d, %Y at %I:%M %p')
+                    except:
+                        time_str = timestamp
+                else:
+                    time_str = "Unknown time"
+                
+                st.markdown(f"""
+                <div style="background: #f8f9fa; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #0d6efd;">
+                    <div style="font-size: 11px; color: #666; margin-bottom: 6px;">
+                        🕐 {time_str}
+                    </div>
+                    <div style="color: #333;">
+                        {note.get('text', '')}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("No notes yet. Add your first note above!")
+
+
+def add_note_to_project(project_id: str, note_text: str):
+    """Add a new note to a project's notes trail."""
+    for i, p in enumerate(st.session_state.projects):
+        if p.get('id') == project_id:
+            if 'notes' not in st.session_state.projects[i]:
+                st.session_state.projects[i]['notes'] = []
+            
+            new_note = {
+                'id': f"note_{datetime.now().strftime('%Y%m%d%H%M%S%f')}",
+                'text': note_text,
+                'timestamp': datetime.now().isoformat()
+            }
+            st.session_state.projects[i]['notes'].append(new_note)
+            st.session_state.projects[i]['updated_at'] = datetime.now().isoformat()
+            break
+    save_projects()
 
 
 def update_project_field(project_id: str, field: str, value):
