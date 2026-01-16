@@ -382,8 +382,10 @@ except ImportError:
             updates['description'] = st.text_area("Description", value=project.get('description', ''), height=100, key=f"{key_prefix}_desc")
             updates['owner'] = st.selectbox("Owner", options=['Greg Furner', 'Cory Timmons', 'Other'],
                 index=['Greg Furner', 'Cory Timmons', 'Other'].index(project.get('owner', 'Other')) if project.get('owner') in ['Greg Furner', 'Cory Timmons', 'Other'] else 2, key=f"{key_prefix}_owner")
-            all_team_members = ['Greg Furner', 'Cory Timmons', 'Legal', 'Finance', 'QA Team', 'Sales Team', 'Production Team', 'IT', 'Facilities', 'HP Technician', 'Dazpak Technical', 'Ross']
-            updates['team_members'] = st.multiselect("Team Members", options=all_team_members, default=project.get('team_members', []), key=f"{key_prefix}_team")
+            all_team_members = ['Greg Furner', 'Cory Timmons', 'Legal', 'Finance', 'QA Team', 'Sales Team', 'Production Team', 'IT', 'Facilities', 'HP Technician', 'Dazpak Technical', 'Dazpak', 'Ross', 'Growve']
+            current_team = project.get('team_members', [])
+            valid_defaults = [m for m in current_team if m in all_team_members]
+            updates['team_members'] = st.multiselect("Team Members", options=all_team_members, default=valid_defaults, key=f"{key_prefix}_team")
         with col2:
             updates['priority'] = st.selectbox("Priority", options=['High', 'Medium', 'Low'],
                 index=['High', 'Medium', 'Low'].index(project.get('priority', 'Medium')), key=f"{key_prefix}_priority")
