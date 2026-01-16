@@ -251,10 +251,21 @@ except ImportError:
         return fig
     
     def create_completion_chart(projects: List[Dict]) -> go.Figure:
+        if not projects:
+            fig = go.Figure()
+            fig.add_annotation(text="No projects to display", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+            fig.update_layout(xaxis=dict(visible=False), yaxis=dict(visible=False), height=300)
+            return fig
         data = [{'Project': f"Obj {p.get('objective_number', '?')}: {p.get('name', 'Unnamed')[:30]}",
                  'Completion': p.get('completion_percentage', 0), 'Status': get_status_with_overdue(p),
                  'Owner': p.get('owner', 'Unassigned')} for p in projects]
-        df = pd.DataFrame(data).sort_values('Completion', ascending=True)
+        df = pd.DataFrame(data)
+        if df.empty:
+            fig = go.Figure()
+            fig.add_annotation(text="No projects to display", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+            fig.update_layout(xaxis=dict(visible=False), yaxis=dict(visible=False), height=300)
+            return fig
+        df = df.sort_values('Completion', ascending=True)
         fig = px.bar(df, x='Completion', y='Project', orientation='h', color='Status',
                      color_discrete_map=COLORS, custom_data=['Owner', 'Status'])
         fig.update_traces(hovertemplate="<b>%{y}</b><br>Completion: %{x}%<br>Owner: %{customdata[0]}<extra></extra>")
@@ -264,10 +275,20 @@ except ImportError:
         return fig
     
     def create_status_pie_chart(projects: List[Dict]) -> go.Figure:
+        if not projects:
+            fig = go.Figure()
+            fig.add_annotation(text="No data", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+            fig.update_layout(height=300)
+            return fig
         status_counts = {}
         for p in projects:
             status = get_status_with_overdue(p)
             status_counts[status] = status_counts.get(status, 0) + 1
+        if not status_counts:
+            fig = go.Figure()
+            fig.add_annotation(text="No data", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+            fig.update_layout(height=300)
+            return fig
         fig = go.Figure(data=[go.Pie(labels=list(status_counts.keys()), values=list(status_counts.values()), hole=0.4,
                                       marker_colors=[COLORS.get(s, '#999') for s in status_counts.keys()])])
         fig.update_layout(title=dict(text="Status Distribution", font=dict(size=16, color=COLORS['primary'])),
@@ -275,6 +296,11 @@ except ImportError:
         return fig
     
     def create_owner_workload_chart(projects: List[Dict]) -> go.Figure:
+        if not projects:
+            fig = go.Figure()
+            fig.add_annotation(text="No data", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+            fig.update_layout(height=350)
+            return fig
         owner_data = {}
         for p in projects:
             owner = p.get('owner', 'Unassigned')
@@ -282,6 +308,11 @@ except ImportError:
                 owner_data[owner] = {'projects': 0, 'hours': 0}
             owner_data[owner]['projects'] += 1
             owner_data[owner]['hours'] += p.get('estimated_hours', 0)
+        if not owner_data:
+            fig = go.Figure()
+            fig.add_annotation(text="No data", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+            fig.update_layout(height=350)
+            return fig
         df = pd.DataFrame([{'Owner': o, 'Projects': d['projects'], 'Hours': d['hours']} for o, d in owner_data.items()])
         fig = make_subplots(rows=1, cols=2, subplot_titles=("Projects by Owner", "Estimated Hours by Owner"))
         fig.add_trace(go.Bar(name='Projects', x=df['Owner'], y=df['Projects'], marker_color=COLORS['primary']), row=1, col=1)
@@ -479,12 +510,31 @@ except ImportError:
         return notes
     
     def render_metrics_row(projects: List[Dict]) -> None:
-        total_projects = len(projects)
+        total_projects = len(projects) if projects else 0
+        if total_projects == 0:
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
+            with col1: st.metric("Total Projects", 0)
+            with col2: st.metric("Completed", 0)
+            with col3: st.metric("In Progress", 0)
+            with col4: st.metric("Overdue", 0)
+            with col5: st.metric("Avg. Completion", "0%")
+            with col6: st.metric("Subtasks Done", "0/0")
+            return
         completed = sum(1 for p in projects if p.get('status') == 'Completed')
         in_progress = sum(1 for p in projects if p.get('status') == 'In Progress')
-        overdue = sum(1 for p in projects if p.get('status') != 'Completed' and p.get('due_date') and 
-                      (datetime.fromisoformat(p.get('due_date')).date() if isinstance(p.get('due_date'), str) else p.get('due_date')) < date.today())
-        avg_completion = sum(p.get('completion_percentage', 0) for p in projects) / total_projects if total_projects > 0 else 0
+        overdue = 0
+        for p in projects:
+            if p.get('status') != 'Completed':
+                due_date = p.get('due_date')
+                if due_date:
+                    if isinstance(due_date, str):
+                        try:
+                            due_date = datetime.fromisoformat(due_date).date()
+                        except:
+                            continue
+                    if due_date < date.today():
+                        overdue += 1
+        avg_completion = sum(p.get('completion_percentage', 0) for p in projects) / total_projects
         total_subtasks = sum(len(p.get('subtasks', [])) for p in projects)
         completed_subtasks = sum(sum(1 for s in p.get('subtasks', []) if s.get('completed')) for p in projects)
         col1, col2, col3, col4, col5, col6 = st.columns(6)
@@ -584,15 +634,141 @@ st.markdown("""
 @st.cache_resource
 def get_data_manager():
     """Initialize and cache the data manager."""
-    return DataManager(data_dir="data")
+    # Use path relative to the app.py file location
+    data_dir = os.path.join(ROOT_DIR, "data")
+    return DataManager(data_dir=data_dir)
 
 
 def load_projects():
     """Load projects from storage into session state."""
     if 'projects' not in st.session_state:
         dm = get_data_manager()
-        st.session_state.projects = dm.load_projects()
+        loaded = dm.load_projects()
+        if not loaded:
+            # Fallback: use embedded default data if file not found
+            loaded = get_default_projects()
+        st.session_state.projects = loaded
     return st.session_state.projects
+
+
+def get_default_projects():
+    """Return default Q1 2026 supply chain projects if data file is missing."""
+    return [
+        {
+            "id": "proj_001", "name": "CMY Color Strategy Implementation", "objective_number": 1,
+            "description": "Implement process for utilizing CMY color strategy and have a documented process for decision making to improve run speeds on HP and gain WIP rate efficiencies.",
+            "priority": "High", "status": "Not Started", "owner": "Greg Furner",
+            "team_members": ["Greg Furner", "HP Technician", "Production Team"],
+            "start_date": "2026-01-06", "due_date": "2026-03-21",
+            "estimated_hours": 240, "actual_hours": 0, "budget": 15000, "budget_spent": 0,
+            "completion_percentage": 0, "category": "Production Optimization",
+            "tags": ["HP Press", "Color Management", "Efficiency"],
+            "subtasks": [
+                {"id": "task_001_1", "name": "CMY Color Calibration Audit", "description": "Conduct CMY color calibration audit and document current HP press color profiles", "start_date": "2026-01-06", "due_date": "2026-01-24", "owner": "Greg Furner", "completed": False, "completion_criteria": "Completed audit report with baseline color profiles", "success_metric": "100% of active substrate profiles documented", "dependencies": "Access to HP press", "notes": []},
+                {"id": "task_001_2", "name": "CMY Decision Matrix Development", "description": "Develop and pilot CMY decision matrix with standardized workflows", "start_date": "2026-01-27", "due_date": "2026-02-21", "owner": "Greg Furner", "completed": False, "completion_criteria": "Written SOP document approved", "success_metric": "10% improvement in setup time", "dependencies": "Completion of audit", "notes": []},
+                {"id": "task_001_3", "name": "Production Staff Training", "description": "Train production staff on CMY protocol and implement tracking system", "start_date": "2026-02-24", "due_date": "2026-03-21", "owner": "Greg Furner", "completed": False, "completion_criteria": "All HP press operators trained", "success_metric": "15%+ improvement vs Q4 baseline", "dependencies": "Decision matrix complete", "notes": []}
+            ], "notes": []
+        },
+        {
+            "id": "proj_002", "name": "Premium White to Standard White Transition", "objective_number": 2,
+            "description": "Validate the ability to switch from Premium White to Standard White when running all print jobs.",
+            "priority": "High", "status": "Not Started", "owner": "Greg Furner",
+            "team_members": ["Greg Furner", "QA Team", "Cory Timmons"],
+            "start_date": "2026-01-06", "due_date": "2026-03-28",
+            "estimated_hours": 200, "actual_hours": 0, "budget": 8000, "budget_spent": 0,
+            "completion_percentage": 0, "category": "Cost Reduction", "tags": ["Materials", "Cost Savings"],
+            "subtasks": [
+                {"id": "task_002_1", "name": "Standard White Quality Validation", "description": "Conduct quality validation testing across job types", "start_date": "2026-01-06", "due_date": "2026-01-31", "owner": "Greg Furner", "completed": False, "completion_criteria": "Testing on 15 job types", "success_metric": "90%+ pass rate", "dependencies": "Sample materials", "notes": []},
+                {"id": "task_002_2", "name": "Inventory Transition Planning", "description": "Develop inventory transition plan", "start_date": "2026-02-03", "due_date": "2026-02-28", "owner": "Greg Furner", "completed": False, "completion_criteria": "Written transition plan", "success_metric": "80% inventory reduction", "dependencies": "Quality validation", "notes": []},
+                {"id": "task_002_3", "name": "Full Production Cutover", "description": "Execute full production cutover to Standard White", "start_date": "2026-03-03", "due_date": "2026-03-28", "owner": "Greg Furner", "completed": False, "completion_criteria": "100% using Standard White", "success_metric": "Zero quality complaints", "dependencies": "Transition plan", "notes": []}
+            ], "notes": []
+        },
+        {
+            "id": "proj_003", "name": "30\" Thermal Laminator Acquisition", "objective_number": 3,
+            "description": "Work with Print Rush to take on ownership of 30\" China Thermal Laminator.",
+            "priority": "High", "status": "Not Started", "owner": "Cory Timmons",
+            "team_members": ["Cory Timmons", "Greg Furner", "Legal", "Facilities"],
+            "start_date": "2026-01-06", "due_date": "2026-03-28",
+            "estimated_hours": 280, "actual_hours": 0, "budget": 25000, "budget_spent": 0,
+            "completion_percentage": 0, "category": "Equipment Acquisition", "tags": ["Lamination", "Print Rush"],
+            "subtasks": [
+                {"id": "task_003_1", "name": "Equipment Transfer Negotiation", "description": "Negotiate equipment transfer terms with Print Rush", "start_date": "2026-01-06", "due_date": "2026-01-31", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Signed agreement", "success_metric": "Favorable terms", "dependencies": "Print Rush confirmation", "notes": []},
+                {"id": "task_003_2", "name": "Facility Preparation", "description": "Prepare facility for laminator installation", "start_date": "2026-02-03", "due_date": "2026-02-21", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Site prepared", "success_metric": "Zero delays", "dependencies": "Equipment specs", "notes": []},
+                {"id": "task_003_3", "name": "Equipment Installation & Training", "description": "Execute equipment transfer, installation, and training", "start_date": "2026-02-24", "due_date": "2026-03-28", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Equipment operational", "success_metric": "Operational within 2 weeks", "dependencies": "Facility ready", "notes": []}
+            ], "notes": []
+        },
+        {
+            "id": "proj_004", "name": "Growve Partnership as 30\" Print Partner", "objective_number": 4,
+            "description": "Establish partnership with Growve as 30\" print partner.",
+            "priority": "High", "status": "Not Started", "owner": "Cory Timmons",
+            "team_members": ["Cory Timmons", "Legal", "Finance", "Greg Furner"],
+            "start_date": "2026-01-06", "due_date": "2026-03-31",
+            "estimated_hours": 200, "actual_hours": 0, "budget": 12000, "budget_spent": 0,
+            "completion_percentage": 0, "category": "Vendor Partnership", "tags": ["Growve", "Printing"],
+            "subtasks": [
+                {"id": "task_004_1", "name": "Partnership Agreement", "description": "Establish formal partnership agreement with Growve", "start_date": "2026-01-06", "due_date": "2026-02-07", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Signed agreement", "success_metric": "15% below current rates", "dependencies": "Growve capacity confirmation", "notes": []},
+                {"id": "task_004_2", "name": "Integrated Workflow Development", "description": "Develop integrated workflow for Growve-printed material", "start_date": "2026-02-10", "due_date": "2026-03-07", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Workflow SOP approved", "success_metric": "Pilot batch processed", "dependencies": "Partnership agreement", "notes": []},
+                {"id": "task_004_3", "name": "Production Ramp-Up", "description": "Execute production ramp-up with Growve", "start_date": "2026-03-10", "due_date": "2026-03-31", "owner": "Cory Timmons", "completed": False, "completion_criteria": "50,000 MSI processed", "success_metric": "20% cost savings", "dependencies": "Workflow complete", "notes": []}
+            ], "notes": []
+        },
+        {
+            "id": "proj_005", "name": "Dazpak Material Cost Optimization", "objective_number": 5,
+            "description": "Work with Dazpak to finalize lowest cost Material through sourcing and Group Buying strategies.",
+            "priority": "High", "status": "Not Started", "owner": "Cory Timmons",
+            "team_members": ["Cory Timmons", "Finance", "Legal"],
+            "start_date": "2026-01-06", "due_date": "2026-03-28",
+            "estimated_hours": 160, "actual_hours": 0, "budget": 5000, "budget_spent": 0,
+            "completion_percentage": 0, "category": "Procurement", "tags": ["Dazpak", "Materials"],
+            "subtasks": [
+                {"id": "task_005_1", "name": "Pricing Negotiation", "description": "Conduct formal pricing negotiation with Dazpak", "start_date": "2026-01-06", "due_date": "2026-01-31", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Written proposal submitted", "success_metric": "Within 10% of $0.30/MSI target", "dependencies": "Volume forecasts", "notes": []},
+                {"id": "task_005_2", "name": "Supply Agreement Execution", "description": "Finalize supply agreement with Dazpak", "start_date": "2026-02-03", "due_date": "2026-02-28", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Signed agreement", "success_metric": "$0.30/MSI or better", "dependencies": "Negotiation complete", "notes": []},
+                {"id": "task_005_3", "name": "Inventory Tracking Implementation", "description": "Implement inventory tracking system at Growve", "start_date": "2026-03-03", "due_date": "2026-03-28", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Tracking system live", "success_metric": "Zero stockouts", "dependencies": "Agreement signed", "notes": []}
+            ], "notes": []
+        },
+        {
+            "id": "proj_006", "name": "26\" Flexo Setup with Dazpak", "objective_number": 6,
+            "description": "Ensure that Dazpak can quote all standard prelams and laminates on their 26\" Flexographic press.",
+            "priority": "Medium", "status": "Not Started", "owner": "Cory Timmons",
+            "team_members": ["Cory Timmons", "Sales Team", "Dazpak Technical"],
+            "start_date": "2026-01-06", "due_date": "2026-03-28",
+            "estimated_hours": 180, "actual_hours": 0, "budget": 10000, "budget_spent": 0,
+            "completion_percentage": 0, "category": "Vendor Setup", "tags": ["Dazpak", "Flexo"],
+            "subtasks": [
+                {"id": "task_006_1", "name": "Product Catalog Audit", "description": "Audit current product catalog for 26\" Flexo compatibility", "start_date": "2026-01-06", "due_date": "2026-01-24", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Product matrix complete", "success_metric": "50+ SKUs identified", "dependencies": "Product master list", "notes": []},
+                {"id": "task_006_2", "name": "Press Configuration & Trials", "description": "Configure 26\" Flexo press and conduct print trials", "start_date": "2026-01-27", "due_date": "2026-02-21", "owner": "Cory Timmons", "completed": False, "completion_criteria": "10+ SKUs approved", "success_metric": "Color match within spec", "dependencies": "Catalog audit", "notes": []},
+                {"id": "task_006_3", "name": "Quoting & Ordering Workflow", "description": "Establish quoting and ordering workflow", "start_date": "2026-02-24", "due_date": "2026-03-28", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Pricing matrix finalized", "success_metric": "5+ orders by end of Q1", "dependencies": "Print trials", "notes": []}
+            ], "notes": []
+        },
+        {
+            "id": "proj_007", "name": "Brand My Bags Vendor Evaluation", "objective_number": 7,
+            "description": "Vet Brand My Bags as potential External Vendor for mid web digital print.",
+            "priority": "Medium", "status": "Not Started", "owner": "Cory Timmons",
+            "team_members": ["Cory Timmons", "QA Team", "Sales Team"],
+            "start_date": "2026-01-06", "due_date": "2026-03-28",
+            "estimated_hours": 120, "actual_hours": 0, "budget": 3000, "budget_spent": 0,
+            "completion_percentage": 0, "category": "Vendor Evaluation", "tags": ["Brand My Bags", "Digital Print"],
+            "subtasks": [
+                {"id": "task_007_1", "name": "Vendor Qualification", "description": "Conduct initial vendor qualification", "start_date": "2026-01-06", "due_date": "2026-01-31", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Qualification checklist complete", "success_metric": "Pricing 10% below alternatives", "dependencies": "Vendor engagement", "notes": []},
+                {"id": "task_007_2", "name": "Sample Order & Validation", "description": "Execute sample order and quality validation", "start_date": "2026-02-03", "due_date": "2026-02-28", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Samples inspected", "success_metric": "95%+ acceptance rate", "dependencies": "Qualification complete", "notes": []},
+                {"id": "task_007_3", "name": "Go/No-Go Decision", "description": "Make go/no-go decision and onboard if validated", "start_date": "2026-03-03", "due_date": "2026-03-28", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Decision documented", "success_metric": "10,000 MSI if approved", "dependencies": "Sample validation", "notes": []}
+            ], "notes": []
+        },
+        {
+            "id": "proj_008", "name": "Alternative CR Zipper Implementation", "objective_number": 8,
+            "description": "Implement alternative CR Zipper setup with External Vendors.",
+            "priority": "High", "status": "Not Started", "owner": "Cory Timmons",
+            "team_members": ["Cory Timmons", "Legal", "Greg Furner", "Dazpak", "Ross"],
+            "start_date": "2026-01-06", "due_date": "2026-03-28",
+            "estimated_hours": 200, "actual_hours": 0, "budget": 8000, "budget_spent": 0,
+            "completion_percentage": 0, "category": "Product Development", "tags": ["CR Zipper", "Compliance"],
+            "subtasks": [
+                {"id": "task_008_1", "name": "Legal Patent Review", "description": "Complete legal review for patent infringement", "start_date": "2026-01-06", "due_date": "2026-02-07", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Legal opinion received", "success_metric": "Zero patent conflicts", "dependencies": "Zipper specifications", "notes": []},
+                {"id": "task_008_2", "name": "Final Design Validation", "description": "Complete internal design validation", "start_date": "2026-02-03", "due_date": "2026-02-28", "owner": "Greg Furner", "completed": False, "completion_criteria": "Design approved", "success_metric": "90%+ customer acceptance", "dependencies": "Legal review progress", "notes": []},
+                {"id": "task_008_3", "name": "Dazpak Training", "description": "Train Dazpak on new CR zipper process", "start_date": "2026-03-03", "due_date": "2026-03-21", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Training complete", "success_metric": "Pilot run within spec", "dependencies": "Design validation", "notes": []},
+                {"id": "task_008_4", "name": "Ross Training", "description": "Train Ross on new CR zipper process", "start_date": "2026-03-10", "due_date": "2026-03-28", "owner": "Cory Timmons", "completed": False, "completion_criteria": "Training complete", "success_metric": "Network-wide consistency", "dependencies": "Design validation", "notes": []}
+            ], "notes": []
+        }
+    ]
 
 
 def save_projects():
