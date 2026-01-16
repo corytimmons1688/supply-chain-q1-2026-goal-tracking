@@ -513,37 +513,26 @@ except ImportError:
         total_projects = len(projects) if projects else 0
         if total_projects == 0:
             col1, col2, col3, col4, col5, col6 = st.columns(6)
-            with col1: st.metric("Total Projects", 0)
+            with col1: st.metric("Total Objectives", 0)
             with col2: st.metric("Completed", 0)
             with col3: st.metric("In Progress", 0)
-            with col4: st.metric("Overdue", 0)
-            with col5: st.metric("Avg. Completion", "0%")
-            with col6: st.metric("Subtasks Done", "0/0")
+            with col4: st.metric("Avg. Completion", "0%")
+            with col5: st.metric("Subtasks Done", "0/0")
+            with col6: st.metric("Potential Savings", "$0")
             return
         completed = sum(1 for p in projects if p.get('status') == 'Completed')
         in_progress = sum(1 for p in projects if p.get('status') == 'In Progress')
-        overdue = 0
-        for p in projects:
-            if p.get('status') != 'Completed':
-                due_date = p.get('due_date')
-                if due_date:
-                    if isinstance(due_date, str):
-                        try:
-                            due_date = datetime.fromisoformat(due_date).date()
-                        except:
-                            continue
-                    if due_date < date.today():
-                        overdue += 1
         avg_completion = sum(p.get('completion_percentage', 0) for p in projects) / total_projects
         total_subtasks = sum(len(p.get('subtasks', [])) for p in projects)
         completed_subtasks = sum(sum(1 for s in p.get('subtasks', []) if s.get('completed')) for p in projects)
+        total_savings = sum(p.get('potential_savings', 0) for p in projects)
         col1, col2, col3, col4, col5, col6 = st.columns(6)
-        with col1: st.metric("Total Projects", total_projects)
+        with col1: st.metric("Total Objectives", total_projects)
         with col2: st.metric("Completed", completed, f"{completed}/{total_projects}")
         with col3: st.metric("In Progress", in_progress)
-        with col4: st.metric("Overdue", overdue, delta_color="inverse")
-        with col5: st.metric("Avg. Completion", f"{avg_completion:.0f}%")
-        with col6: st.metric("Subtasks Done", f"{completed_subtasks}/{total_subtasks}")
+        with col4: st.metric("Avg. Completion", f"{avg_completion:.0f}%")
+        with col5: st.metric("Subtasks Done", f"{completed_subtasks}/{total_subtasks}")
+        with col6: st.metric("Potential Savings", f"${total_savings:,.0f}")
 
 
 # =============================================================================
@@ -876,8 +865,8 @@ def render_dashboard():
     
     st.divider()
     
-    # Charts Row 1
-    col1, col2 = st.columns([2, 1])
+    # Charts Row: Completion Progress and Savings Projection
+    col1, col2 = st.columns(2)
     
     with col1:
         st.plotly_chart(
@@ -888,46 +877,12 @@ def render_dashboard():
     
     with col2:
         st.plotly_chart(
-            create_status_pie_chart(projects),
+            create_savings_chart(projects),
             use_container_width=True,
-            key="dashboard_status_pie"
+            key="dashboard_savings"
         )
     
-    # Charts Row 2
-    col3, col4 = st.columns(2)
-    
-    with col3:
-        st.plotly_chart(
-            create_owner_workload_chart(projects),
-            use_container_width=True,
-            key="dashboard_workload"
-        )
-    
-    with col4:
-        st.plotly_chart(
-            create_budget_chart(projects),
-            use_container_width=True,
-            key="dashboard_budget"
-        )
-    
-    # Charts Row 3
-    col5, col6 = st.columns(2)
-    
-    with col5:
-        st.plotly_chart(
-            create_priority_chart(projects),
-            use_container_width=True,
-            key="dashboard_priority"
-        )
-    
-    with col6:
-        st.plotly_chart(
-            create_monthly_milestone_chart(projects),
-            use_container_width=True,
-            key="dashboard_milestones"
-        )
-    
-    # Recent Activity / Upcoming Deadlines
+    # Upcoming Deadlines
     st.divider()
     st.markdown("### 📅 Upcoming Deadlines")
     
@@ -956,7 +911,7 @@ def render_dashboard():
         upcoming_df['Status'] = upcoming_df['Days Away'].apply(
             lambda x: '🔴 Overdue' if x < 0 else '🟡 Due Soon' if x <= 7 else '🟢 On Track'
         )
-        upcoming_df['Due Date'] = upcoming_df['Due Date'].apply(lambda x: x.strftime('%b %d, %Y'))
+        upcoming_df['Due Date'] = upcoming_df['Due Date'].apply(lambda x: x.strftime('%m/%d/%Y'))
         st.dataframe(
             upcoming_df[['Project', 'Subtask', 'Due Date', 'Owner', 'Status']],
             use_container_width=True,
@@ -964,6 +919,61 @@ def render_dashboard():
         )
     else:
         st.success("🎉 All subtasks completed!")
+
+
+def create_savings_chart(projects: list):
+    """Create a bar chart showing potential savings by objective."""
+    import plotly.graph_objects as go
+    
+    # Extract savings data
+    obj_names = []
+    savings = []
+    colors = []
+    
+    for p in sorted(projects, key=lambda x: x.get('objective_number', 999)):
+        obj_num = p.get('objective_number', '?')
+        name = p.get('name', 'Unnamed')
+        potential_savings = p.get('potential_savings', 0)
+        
+        obj_names.append(f"Obj {obj_num}")
+        savings.append(potential_savings)
+        
+        # Color based on completion
+        completion = p.get('completion_percentage', 0)
+        if completion >= 75:
+            colors.append('#198754')  # Green
+        elif completion >= 25:
+            colors.append('#ffc107')  # Yellow
+        else:
+            colors.append('#6c757d')  # Gray
+    
+    total_savings = sum(savings)
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        x=obj_names,
+        y=savings,
+        marker_color=colors,
+        text=[f"${s:,.0f}" for s in savings],
+        textposition='outside',
+        hovertemplate='%{x}<br>Potential Savings: $%{y:,.0f}<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        title=dict(
+            text=f"💰 Total Projected Savings: ${total_savings:,.0f}",
+            font=dict(size=16)
+        ),
+        xaxis_title="Objective",
+        yaxis_title="Potential Savings ($)",
+        yaxis=dict(tickformat="$,.0f"),
+        showlegend=False,
+        height=350,
+        margin=dict(t=60, b=40, l=60, r=20)
+    )
+    
+    return fig
 
 
 # =============================================================================
