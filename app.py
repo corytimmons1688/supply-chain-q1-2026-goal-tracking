@@ -1387,13 +1387,7 @@ def render_project_sidebar(projects: list):
             subtask_dep_id = f"{project_id}_{sub_idx}"
             is_dependency = subtask_dep_id in all_dependency_ids
             
-            # Subtask container with light background
-            st.markdown(f"""
-            <div style="background: rgba(255,255,255,0.7); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid #e0e0e0;">
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Row 1: dependency marker + checkbox + name (full width)
+            # Row 1: dependency marker + checkbox + name (expandable text area)
             col_star, col_check, col_name = st.columns([0.05, 0.07, 0.88])
             
             with col_star:
@@ -1413,55 +1407,49 @@ def render_project_sidebar(projects: list):
                     st.rerun()
             
             with col_name:
-                new_name = st.text_input(
+                new_name = st.text_area(
                     "Name",
                     value=subtask.get('name', ''),
                     key=f"name_{project_id}_{sub_idx}",
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    height=68
                 )
                 if new_name != subtask.get('name', ''):
                     update_subtask_field(project_id, sub_idx, 'name', new_name)
             
-            # Row 2: date + position + delete (compact)
-            col_lbl1, col_date, col_lbl2, col_move, col_del = st.columns([0.12, 0.38, 0.12, 0.2, 0.18])
-            
-            with col_lbl1:
-                st.markdown("<span style='font-size: 12px; color: #666;'>Due:</span>", unsafe_allow_html=True)
+            # Row 2: date + position + delete (inline)
+            col_date, col_move, col_del = st.columns([0.50, 0.30, 0.20])
             
             with col_date:
                 new_due = st.date_input(
-                    "Due",
+                    "Due Date",
                     value=due_date or date(2026, 3, 31),
                     key=f"due_{project_id}_{sub_idx}",
-                    label_visibility="collapsed",
                     format="MM/DD/YYYY"
                 )
                 if new_due != due_date:
                     update_subtask_field(project_id, sub_idx, 'due_date', new_due)
             
-            with col_lbl2:
-                st.markdown("<span style='font-size: 12px; color: #666;'>Pos:</span>", unsafe_allow_html=True)
-            
             with col_move:
                 positions = list(range(1, len(subtasks) + 1))
                 current_pos = sub_idx + 1
                 new_pos = st.selectbox(
-                    "Pos",
+                    "Position",
                     options=positions,
                     index=sub_idx,
-                    key=f"pos_{project_id}_{sub_idx}",
-                    label_visibility="collapsed"
+                    key=f"pos_{project_id}_{sub_idx}"
                 )
                 if new_pos != current_pos:
                     move_subtask_to_position(project_id, sub_idx, new_pos - 1)
                     st.rerun()
             
             with col_del:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 if st.button("🗑️", key=f"del_{project_id}_{sub_idx}", help="Delete subtask"):
                     delete_subtask(project_id, sub_idx)
                     st.rerun()
             
-            st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
+            st.divider()
     
     # Add subtask
     if st.button("➕ Add Subtask", key=f"add_{project_id}"):
