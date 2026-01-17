@@ -1387,8 +1387,8 @@ def render_project_sidebar(projects: list):
             subtask_dep_id = f"{project_id}_{sub_idx}"
             is_dependency = subtask_dep_id in all_dependency_ids
             
-            # Row with dependency marker: star | checkbox | name | date | reorder
-            col_star, col_check, col_name, col_date, col_move = st.columns([0.06, 0.06, 0.50, 0.23, 0.15])
+            # Row: star | checkbox | name | date | reorder | delete
+            col_star, col_check, col_name, col_date, col_move, col_del = st.columns([0.05, 0.05, 0.42, 0.20, 0.13, 0.15])
             
             with col_star:
                 if is_dependency:
@@ -1443,6 +1443,11 @@ def render_project_sidebar(projects: list):
                 if new_pos != current_pos:
                     # Move subtask to new position
                     move_subtask_to_position(project_id, sub_idx, new_pos - 1)
+                    st.rerun()
+            
+            with col_del:
+                if st.button("🗑️", key=f"del_{project_id}_{sub_idx}", help="Delete subtask"):
+                    delete_subtask(project_id, sub_idx)
                     st.rerun()
     
     # Add subtask
@@ -1575,6 +1580,24 @@ def move_subtask(project_id: str, from_idx: int, to_idx: int):
             if 0 <= from_idx < len(subtasks) and 0 <= to_idx < len(subtasks):
                 subtasks[from_idx], subtasks[to_idx] = subtasks[to_idx], subtasks[from_idx]
                 st.session_state.projects[i]['subtasks'] = subtasks
+            break
+    save_projects()
+
+
+def delete_subtask(project_id: str, sub_idx: int):
+    """Delete a subtask from a project."""
+    for i, p in enumerate(st.session_state.projects):
+        if p.get('id') == project_id:
+            subtasks = st.session_state.projects[i].get('subtasks', [])
+            if 0 <= sub_idx < len(subtasks):
+                subtasks.pop(sub_idx)
+                st.session_state.projects[i]['subtasks'] = subtasks
+                # Recalculate completion
+                if subtasks:
+                    completed_count = sum(1 for s in subtasks if s.get('completed'))
+                    st.session_state.projects[i]['completion_percentage'] = int((completed_count / len(subtasks)) * 100)
+                else:
+                    st.session_state.projects[i]['completion_percentage'] = 0
             break
     save_projects()
 
