@@ -785,7 +785,7 @@ def render_sidebar():
         # Navigation
         page = st.radio(
             "Navigation",
-            ["📊 Dashboard", "📅 Timeline", "📋 Projects", "✅ Completion Tracker", "⚙️ Settings"],
+            ["📊 Dashboard", "📋 Projects", "⚙️ Settings"],
             label_visibility="collapsed"
         )
         
@@ -810,7 +810,7 @@ def render_sidebar():
         st.divider()
         
         # Filters (for applicable pages)
-        if page in ["📅 Timeline", "📋 Projects"]:
+        if page in ["📋 Projects"]:
             st.markdown("### Filters")
             
             # Owner filter
@@ -919,6 +919,90 @@ def render_dashboard():
         )
     else:
         st.success("🎉 All subtasks completed!")
+    
+    # Completion Tracker (collapsed)
+    st.divider()
+    
+    with st.expander("✅ Completion Tracker", expanded=False):
+        # Overall Progress
+        total_subtasks = sum(len(p.get('subtasks', [])) for p in projects)
+        completed_subtasks = sum(
+            sum(1 for s in p.get('subtasks', []) if s.get('completed'))
+            for p in projects
+        )
+        overall_percentage = int((completed_subtasks / total_subtasks * 100)) if total_subtasks > 0 else 0
+        
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            st.markdown(render_progress_bar(overall_percentage, height=30), unsafe_allow_html=True)
+        with col2:
+            st.metric("Subtasks Complete", f"{completed_subtasks}/{total_subtasks}")
+        with col3:
+            projects_complete = sum(1 for p in projects if p.get('status') == 'Completed')
+            st.metric("Objectives Complete", f"{projects_complete}/{len(projects)}")
+        
+        st.markdown("---")
+        
+        # Project-by-project breakdown (all collapsed by default)
+        for project in sorted(projects, key=lambda x: x.get('objective_number', 999)):
+            subtasks = project.get('subtasks', [])
+            completed = sum(1 for s in subtasks if s.get('completed'))
+            percentage = int((completed / len(subtasks) * 100)) if subtasks else 0
+            
+            with st.expander(
+                f"**Obj {project.get('objective_number', '?')}: {project.get('name', 'Unnamed')}** — {percentage}%",
+                expanded=False
+            ):
+                st.markdown(render_progress_bar(percentage), unsafe_allow_html=True)
+                st.caption(f"Owner: {project.get('owner', 'Unassigned')} | Due: {project.get('due_date', 'Not set')}")
+                
+                if subtasks:
+                    for i, subtask in enumerate(subtasks):
+                        due_date = subtask.get('due_date')
+                        if isinstance(due_date, str):
+                            try:
+                                due_date = datetime.fromisoformat(due_date).date()
+                            except:
+                                due_date = None
+                        
+                        is_completed = subtask.get('completed', False)
+                        is_overdue = due_date and due_date < date.today() and not is_completed
+                        
+                        col1, col2 = st.columns([0.08, 0.92])
+                        
+                        with col1:
+                            new_completed = st.checkbox(
+                                "",
+                                value=is_completed,
+                                key=f"dash_tracker_{project.get('id')}_{i}",
+                                label_visibility="collapsed"
+                            )
+                        
+                        with col2:
+                            status_icon = "✅" if new_completed else "🔴" if is_overdue else "⬜"
+                            style = "text-decoration: line-through; color: #888;" if new_completed else ""
+                            due_str = due_date.strftime('%m/%d') if due_date else 'Not set'
+                            st.markdown(f"""
+                            <span style="{style}">
+                                {status_icon} {subtask.get('name', 'Unnamed')}
+                                <span style="color: #888; font-size: 0.8rem;">(Due: {due_str})</span>
+                            </span>
+                            """, unsafe_allow_html=True)
+                        
+                        # Update if changed
+                        if new_completed != is_completed:
+                            for pi, p in enumerate(st.session_state.projects):
+                                if p.get('id') == project.get('id'):
+                                    st.session_state.projects[pi]['subtasks'][i]['completed'] = new_completed
+                                    completed_count = sum(1 for s in st.session_state.projects[pi]['subtasks'] if s.get('completed'))
+                                    total_count = len(st.session_state.projects[pi]['subtasks'])
+                                    st.session_state.projects[pi]['completion_percentage'] = int((completed_count / total_count) * 100) if total_count > 0 else 0
+                                    break
+                            save_projects()
+                            st.rerun()
+                else:
+                    st.info("No subtasks defined.")
 
 
 def create_savings_chart(projects: list):
@@ -1774,12 +1858,8 @@ def main():
     # Render selected page
     if page == "📊 Dashboard":
         render_dashboard()
-    elif page == "📅 Timeline":
-        render_timeline()
     elif page == "📋 Projects":
         render_projects()
-    elif page == "✅ Completion Tracker":
-        render_completion_tracker()
     elif page == "⚙️ Settings":
         render_settings()
 
