@@ -1161,7 +1161,7 @@ def render_projects():
     
     # Create two-column layout: main content (left) and detail sidebar (right)
     if st.session_state.expanded_project_id:
-        col_main, col_sidebar = st.columns([3, 2])
+        col_main, col_sidebar = st.columns([2, 2])
     else:
         col_main = st.container()
         col_sidebar = None
@@ -1387,14 +1387,18 @@ def render_project_sidebar(projects: list):
             subtask_dep_id = f"{project_id}_{sub_idx}"
             is_dependency = subtask_dep_id in all_dependency_ids
             
-            # Row: star | checkbox | name | date | reorder | delete
-            col_star, col_check, col_name, col_date, col_move, col_del = st.columns([0.05, 0.05, 0.42, 0.20, 0.13, 0.15])
+            # Subtask container with light background
+            st.markdown(f"""
+            <div style="background: rgba(255,255,255,0.7); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid #e0e0e0;">
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Row 1: dependency marker + checkbox + name (full width)
+            col_star, col_check, col_name = st.columns([0.05, 0.07, 0.88])
             
             with col_star:
                 if is_dependency:
                     st.markdown("<span style='color: #f59e0b; font-size: 16px;' title='Dependency'>*</span>", unsafe_allow_html=True)
-                else:
-                    st.write("")
             
             with col_check:
                 new_completed = st.checkbox(
@@ -1418,6 +1422,12 @@ def render_project_sidebar(projects: list):
                 if new_name != subtask.get('name', ''):
                     update_subtask_field(project_id, sub_idx, 'name', new_name)
             
+            # Row 2: date + position + delete (compact)
+            col_lbl1, col_date, col_lbl2, col_move, col_del = st.columns([0.12, 0.38, 0.12, 0.2, 0.18])
+            
+            with col_lbl1:
+                st.markdown("<span style='font-size: 12px; color: #666;'>Due:</span>", unsafe_allow_html=True)
+            
             with col_date:
                 new_due = st.date_input(
                     "Due",
@@ -1429,8 +1439,10 @@ def render_project_sidebar(projects: list):
                 if new_due != due_date:
                     update_subtask_field(project_id, sub_idx, 'due_date', new_due)
             
+            with col_lbl2:
+                st.markdown("<span style='font-size: 12px; color: #666;'>Pos:</span>", unsafe_allow_html=True)
+            
             with col_move:
-                # Compact reorder - selectbox to pick position
                 positions = list(range(1, len(subtasks) + 1))
                 current_pos = sub_idx + 1
                 new_pos = st.selectbox(
@@ -1441,7 +1453,6 @@ def render_project_sidebar(projects: list):
                     label_visibility="collapsed"
                 )
                 if new_pos != current_pos:
-                    # Move subtask to new position
                     move_subtask_to_position(project_id, sub_idx, new_pos - 1)
                     st.rerun()
             
@@ -1449,6 +1460,8 @@ def render_project_sidebar(projects: list):
                 if st.button("🗑️", key=f"del_{project_id}_{sub_idx}", help="Delete subtask"):
                     delete_subtask(project_id, sub_idx)
                     st.rerun()
+            
+            st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
     
     # Add subtask
     if st.button("➕ Add Subtask", key=f"add_{project_id}"):
