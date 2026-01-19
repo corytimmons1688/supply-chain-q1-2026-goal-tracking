@@ -1387,7 +1387,12 @@ def render_project_sidebar(projects: list):
             subtask_dep_id = f"{project_id}_{sub_idx}"
             is_dependency = subtask_dep_id in all_dependency_ids
             
-            # Single row: star | checkbox | name | date | position | delete
+            # Calculate height based on text length (roughly 40 chars per line)
+            name_text = subtask.get('name', '')
+            num_lines = max(1, len(name_text) // 35 + 1)
+            text_height = max(68, num_lines * 25 + 20)
+            
+            # Single row: star | checkbox | name (text_area) | date | position | delete
             col_star, col_check, col_name, col_date, col_move, col_del = st.columns([0.04, 0.06, 0.40, 0.22, 0.15, 0.13])
             
             with col_star:
@@ -1407,11 +1412,12 @@ def render_project_sidebar(projects: list):
                     st.rerun()
             
             with col_name:
-                new_name = st.text_input(
+                new_name = st.text_area(
                     "Name",
-                    value=subtask.get('name', ''),
+                    value=name_text,
                     key=f"name_{project_id}_{sub_idx}",
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    height=text_height
                 )
                 if new_name != subtask.get('name', ''):
                     update_subtask_field(project_id, sub_idx, 'name', new_name)
