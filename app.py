@@ -106,9 +106,12 @@ except ImportError:
         
         def save_projects(self, projects: List[Dict]) -> bool:
             try:
+                self.ensure_data_dir()
                 serialized = self._serialize_dates(projects)
                 with open(self.projects_file, 'w') as f:
                     json.dump(serialized, f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
                 return True
             except Exception as e:
                 print(f"Error saving projects: {e}")
@@ -630,13 +633,18 @@ def get_data_manager():
 
 def load_projects():
     """Load projects from storage into session state."""
+    dm = get_data_manager()
+    
     if 'projects' not in st.session_state:
-        dm = get_data_manager()
         loaded = dm.load_projects()
-        if not loaded:
-            # Fallback: use embedded default data if file not found
-            loaded = get_default_projects()
-        st.session_state.projects = loaded
+        if loaded:
+            st.session_state.projects = loaded
+        else:
+            # Only use defaults if file is truly empty/missing
+            st.session_state.projects = get_default_projects()
+            # Save defaults to file
+            dm.save_projects(st.session_state.projects)
+    
     return st.session_state.projects
 
 
@@ -762,8 +770,13 @@ def get_default_projects():
 
 def save_projects():
     """Save projects from session state to storage."""
-    dm = get_data_manager()
-    dm.save_projects(st.session_state.projects)
+    if 'projects' in st.session_state:
+        dm = get_data_manager()
+        success = dm.save_projects(st.session_state.projects)
+        if not success:
+            st.error("Failed to save projects!")
+        return success
+    return False
 
 
 # =============================================================================
@@ -1382,12 +1395,14 @@ def render_project_sidebar(projects: list):
                     due_date = datetime.fromisoformat(due_date).date()
                 except:
                     due_date = None
+            elif isinstance(due_date, datetime):
+                due_date = due_date.date()
             
             # Check if this subtask is a dependency
             subtask_dep_id = f"{project_id}_{sub_idx}"
             is_dependency = subtask_dep_id in all_dependency_ids
             
-            # Calculate height based on text length (roughly 40 chars per line)
+            # Calculate height based on text length (roughly 35 chars per line)
             name_text = subtask.get('name', '')
             num_lines = max(1, len(name_text) // 35 + 1)
             text_height = max(68, num_lines * 25 + 20)
@@ -1419,7 +1434,7 @@ def render_project_sidebar(projects: list):
                     label_visibility="collapsed",
                     height=text_height
                 )
-                if new_name != subtask.get('name', ''):
+                if new_name != name_text:
                     update_subtask_field(project_id, sub_idx, 'name', new_name)
             
             with col_date:
@@ -1638,6 +1653,7 @@ def update_subtask_field(project_id: str, subtask_idx: int, field: str, value):
         if p.get('id') == project_id:
             if 'subtasks' in st.session_state.projects[i] and subtask_idx < len(st.session_state.projects[i]['subtasks']):
                 st.session_state.projects[i]['subtasks'][subtask_idx][field] = value
+                st.session_state.projects[i]['updated_at'] = datetime.now().isoformat()
             break
     save_projects()
 
