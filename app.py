@@ -1301,14 +1301,14 @@ def render_project_sidebar(projects: list):
     
     st.markdown(f"**{project.get('name', 'Unnamed')}**")
     
-    # Dependency dropdown - get all subtasks from all projects
+    # Dependency dropdown - get all subtasks from all projects using actual subtask IDs
     all_subtasks = []
     for p in projects:
         p_num = p.get('objective_number', '?')
         for s_idx, s in enumerate(p.get('subtasks', [])):
             subtask_label = f"{p_num}.{s_idx + 1} - {s.get('name', 'Unnamed')}"
-            subtask_id = f"{p.get('id')}_{s_idx}"
-            all_subtasks.append((subtask_id, subtask_label))
+            actual_subtask_id = s.get('id', f"{p.get('id')}_{s_idx}")
+            all_subtasks.append((actual_subtask_id, subtask_label))
     
     # Current dependencies
     current_deps = project.get('dependencies', [])
@@ -1368,7 +1368,7 @@ def render_project_sidebar(projects: list):
     
     st.divider()
     
-    # Collect all dependency IDs across all projects (needed for both header and subtask display)
+    # Collect all dependency IDs across all projects (using actual subtask IDs)
     all_dependency_ids = set()
     for p in projects:
         deps = p.get('dependencies', [])
@@ -1382,12 +1382,13 @@ def render_project_sidebar(projects: list):
     subtasks = project.get('subtasks', [])
     
     # Show legend if any subtasks are dependencies
-    if subtasks and any(f"{project_id}_{i}" in all_dependency_ids for i in range(len(subtasks))):
+    if subtasks and any(s.get('id') in all_dependency_ids for s in subtasks):
         st.caption("* = dependency for another objective")
     
     if subtasks:
         for sub_idx, subtask in enumerate(subtasks):
             is_completed = subtask.get('completed', False)
+            subtask_id = subtask.get('id', f'subtask_{sub_idx}')
             
             due_date = subtask.get('due_date')
             if isinstance(due_date, str):
@@ -1398,9 +1399,8 @@ def render_project_sidebar(projects: list):
             elif isinstance(due_date, datetime):
                 due_date = due_date.date()
             
-            # Check if this subtask is a dependency
-            subtask_dep_id = f"{project_id}_{sub_idx}"
-            is_dependency = subtask_dep_id in all_dependency_ids
+            # Check if this subtask is a dependency (using actual subtask ID)
+            is_dependency = subtask_id in all_dependency_ids
             
             # Calculate height based on text length (roughly 35 chars per line)
             name_text = subtask.get('name', '')
@@ -1418,7 +1418,7 @@ def render_project_sidebar(projects: list):
                 new_completed = st.checkbox(
                     "✓",
                     value=is_completed,
-                    key=f"chk_{project_id}_{sub_idx}",
+                    key=f"chk_{subtask_id}",
                     label_visibility="collapsed"
                 )
                 if new_completed != is_completed:
@@ -1430,7 +1430,7 @@ def render_project_sidebar(projects: list):
                 new_name = st.text_area(
                     "Name",
                     value=name_text,
-                    key=f"name_{project_id}_{sub_idx}",
+                    key=f"name_{subtask_id}",
                     label_visibility="collapsed",
                     height=text_height
                 )
@@ -1441,7 +1441,7 @@ def render_project_sidebar(projects: list):
                 new_due = st.date_input(
                     "Due",
                     value=due_date or date(2026, 3, 31),
-                    key=f"due_{project_id}_{sub_idx}",
+                    key=f"due_{subtask_id}",
                     label_visibility="collapsed",
                     format="MM/DD/YYYY"
                 )
@@ -1451,19 +1451,24 @@ def render_project_sidebar(projects: list):
             with col_move:
                 positions = list(range(1, len(subtasks) + 1))
                 current_pos = sub_idx + 1
+                pos_key = f"pos_{subtask_id}"
                 new_pos = st.selectbox(
                     "Pos",
                     options=positions,
                     index=sub_idx,
-                    key=f"pos_{project_id}_{sub_idx}",
+                    key=pos_key,
                     label_visibility="collapsed"
                 )
                 if new_pos != current_pos:
                     move_subtask_to_position(project_id, sub_idx, new_pos - 1)
+                    # Clear all position keys for this project to avoid stale state
+                    keys_to_clear = [k for k in st.session_state.keys() if k.startswith('pos_')]
+                    for k in keys_to_clear:
+                        del st.session_state[k]
                     st.rerun()
             
             with col_del:
-                if st.button("🗑️", key=f"del_{project_id}_{sub_idx}", help="Delete"):
+                if st.button("🗑️", key=f"del_{subtask_id}", help="Delete"):
                     delete_subtask(project_id, sub_idx)
                     st.rerun()
     
